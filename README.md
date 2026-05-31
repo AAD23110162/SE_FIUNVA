@@ -1,7 +1,17 @@
-**FIUNVA — Sistema Experto Multi-agente para Consultoría Tecnológica**
+**SE-FIUNVA — Sistema Experto FIUNVA**
 
 **Resumen:**
 - **Objetivo:** Desarrollar un sistema experto moderno basado en agentes inteligentes capaces de interactuar con clientes, realizar inferencias y automatizar procesos de venta o soporte mediante IA para proyectos de electrónica, software y robótica.
+
+**Concepto de Marca:**
+- **Nombre formal:** SE-FIUNVA, abreviatura de Sistema Experto FIUNVA.
+- **Juego conceptual:** El nombre se puede leer como “se FIUNVA”, reforzando la idea de que la plataforma no solo representa a la marca, sino que también se expresa como una acción: FIUNVA se activa, atiende, infiere y propone.
+- **Intención del naming:** Crear una identidad técnica y recordable que conecte con consultoría tecnológica, ingeniería y automatización, evitando que el proyecto se perciba como un chatbot genérico.
+
+**Propuesta Evolutiva del Proyecto:**
+- **Nombre:** FIUNVA Nexus o FIUNVA Expert System (FES).
+- **Enfoque:** No limitar el sistema a un chatbot comercial. La propuesta debe convertirse en una plataforma de valor real para FIUNVA, capaz de atender clientes de ingeniería, cotizar, generar propuestas técnicas, gestionar proyectos, dar soporte postventa y explicar decisiones e inferencias.
+- **Beneficio principal:** El proyecto académico queda alineado con una herramienta reutilizable por la marca.
 
 **Alcance e Integraciones:**
 - **Incluye:** Ingeniería del conocimiento, sistemas expertos, motores de inferencia, bases de datos, agentes inteligentes, IA moderna, explicabilidad del razonamiento y arquitectura cliente-servidor o local.
@@ -25,6 +35,14 @@
     - **Funcionalidad:** Generar resumen de la venta, explicar decisiones e inferencias realizadas y solicitar validación final al usuario o operador.
     - **Ejemplo:** “Se detectó que el cliente solicitó 3 motores NEMA17. Existe stock suficiente. Se aplicó descuento por cliente frecuente.”
 
+- **Arquitectura ampliada recomendada para FIUNVA:**
+  - **Frontend:** React Web App con Firebase Hosting y Firebase Auth.
+  - **Backend:** Firebase Functions con lógica de negocio y orquestación de agentes.
+  - **IA:** Gemini 2.5 Flash para atención y clasificación; Gemini 2.5 Pro para propuestas complejas y análisis avanzado.
+  - **Persistencia:** Firestore como base de datos principal.
+  - **RAG:** Firestore + embeddings + vector search para consultar proyectos previos, documentación FIUNVA, plantillas y procedimientos.
+  - **Flujo general:** Cliente -> React Web App -> Firebase Hosting -> Firebase Functions -> Agentes -> Gemini -> Firestore.
+
 **Tema del Proyecto:**
 - **Áreas sugeridas (no limitadas):** Ventas, diagnóstico, atención al cliente, soporte técnico, mantenimiento, medicina, automatización, educación, robótica, electrónica, mecatrónica.
 
@@ -35,6 +53,72 @@
 - **Requisito:** El sistema DEBE conectarse a una base de datos.
 - **Opciones sugeridas:** SQLite, PostgreSQL, MongoDB, Firebase, Supabase.
 - **Fuentes de datos permitidas:** Datasets descargados, HuggingFace, Kaggle.
+
+**Base de Conocimiento FIUNVA:**
+- El sistema debe conocer, como mínimo, los siguientes dominios de conocimiento:
+  - **Servicios:** Diseño PCB, Firmware embebido, ESP32, STM32, Arduino, sistemas IoT, automatización, robótica, diseño mecánico, impresión 3D e integración de sensores.
+  - **Productos:** Prototipos, PCB, sistemas electrónicos y equipos de automatización.
+  - **Clientes:** Universidades, empresas, emprendedores y makers.
+  - **Proyectos:** Cotizaciones, seguimiento, desarrollo y entrega.
+
+**Ingeniería del Conocimiento:**
+- La base de reglas debe existir como conocimiento explícito y no solo como texto dentro de prompts.
+- Ejemplos de reglas:
+  - IF cliente solicita PCB THEN asignar área electrónica.
+  - IF cliente solicita ESP32 THEN recomendar firmware embebido.
+  - IF proyecto incluye IoT THEN agregar módulo nube.
+  - IF cliente es recurrente THEN aplicar descuento.
+  - IF tiempo estimado > 4 semanas THEN requerir anticipo.
+- **Sugerencia de almacenamiento:** Colección `rules` en Firestore.
+
+**Colecciones sugeridas en Firestore:**
+- `users`
+- `clients`
+- `projects`
+- `quotes`
+- `rules`
+- `knowledge_base`
+- `conversations`
+
+**Ejemplos de documentos:**
+- `clients`:
+
+```json
+{
+  "name": "Empresa XYZ",
+  "type": "Empresa",
+  "recurrent": true
+}
+```
+
+- `projects`:
+
+```json
+{
+  "title": "PCB Control Motores",
+  "status": "Cotización"
+}
+```
+
+- `rules`:
+
+```json
+{
+  "id": "R001",
+  "condition": "cliente_recurrente",
+  "action": "descuento_10"
+}
+```
+
+- `knowledge_base`:
+
+```json
+{
+  "service": "Diseño PCB",
+  "estimated_hours": 40,
+  "complexity": "Media"
+}
+```
 
 **Requisito IMPORTANTE — GitHub:**
 - **Obligatorio:** Subir el trabajo continuamente a GitHub con commits diarios y evidencia del desarrollo.
@@ -55,10 +139,11 @@
 - Arquitectura funcional (cliente-servidor o local).
 
 **Sugerencia de Stack Inicial (ejemplo práctico):**
-- **Backend / Agentes:** Python, FastAPI (API + agentes) o Flask.
-- **Interfaz ligera:** Streamlit o Gradio para demo local; opcionalmente frontend web + WebSocket.
-- **Persistencia:** SQLite para prototipos locales; PostgreSQL o MongoDB para despliegue más completo.
-- **IA / Razonamiento:** LangChain + modelos locales o APIs (Ollama, OpenRouter, HuggingFace, Gemini API). Implementar motor de inferencia con reglas explicitas o con un sistema híbrido (reglas + LLM para NLU).
+- **Frontend:** React + Firebase Hosting.
+- **Backend / Agentes:** Firebase Functions con Python o Node.js para orquestación.
+- **Persistencia:** Firestore como base principal; alternativas permitidas: SQLite, PostgreSQL o MongoDB.
+- **IA / Razonamiento:** Gemini 2.5 Flash y Gemini 2.5 Pro, con apoyo de LangChain si se requiere orquestación híbrida.
+- **Motor de inferencia:** Reglas explícitas almacenadas en Firestore y aplicadas por un agente especializado.
 
 **Estructura recomendada del repositorio:**
 - **/src:** Código fuente de agentes y servicios.
@@ -94,26 +179,53 @@ streamlit run ui/app.py        # Si se usa Streamlit para demo
 
 4. Probar flujo: enviar mensaje de cliente → Agente Atención procesa → Generador crea pedido → Supervisor explica y valida.
 
-**Evidencia y evaluación:**
-- Mantener commits diarios con mensajes claros.
-- Adjuntar capturas e historial de trabajo dentro de `docs/GG_registro_Proy.pdf`.
-- Subir el video demostrativo y añadir el enlace en el PDF.
+**MVP sugerido por fases:**
+- **Sprint 1:** GitHub, Firebase, React y login.
+- **Sprint 2:** Agente de atención al cliente.
+- **Sprint 3:** Motor de inferencia.
+- **Sprint 4:** Generación de cotizaciones.
+- **Sprint 5:** Supervisor explicable.
 
-**Criterios de evaluación (orientativos):**
-- Funcionamiento local reproducible.
-- Presencia de inferencias y reglas demostradas.
-- Explicabilidad coherente y trazable.
-- Integración con una base de datos real.
-- Historial de GitHub con progreso real.
+**Arquitectura final recomendada:**
 
-**Siguientes pasos sugeridos:**
-- Definir tema final del proyecto (ventas, diagnóstico, soporte, etc.).
-- Elegir pila tecnológica definitiva y plantilla inicial.
-- Implementar esquema inicial de base de conocimiento y reglas.
+```text
+CLIENTE
+  │
+  ▼
+React Web App
+  │
+  ▼
+Firebase Hosting
+  │
+  ▼
+Firebase Functions
+  │
+  ├──────────────┬──────────────┬──────────────┐
+  ▼              ▼              ▼              ▼
+Customer      Inference      Proposal      Supervisor
+ Agent          Agent          Agent          Agent
+  │              │              │              │
+  └──────────────┴──────────────┴──────────────┘
+              │
+              ▼
+            Gemini
+              │
+              ▼
+          Firestore
+              │
+       ┌─────────┼─────────┐
+       ▼         ▼         ▼
+     Rules     Projects    Clients
+```
 
-**Contacto / Credenciales del Proyecto:**
-- Consultoría: FIUNVA — Proyectos de electrónica, software y robótica.
-- Repositorio principal: subir continuamente a GitHub siguiendo las reglas de commits.
+**Qué debe demostrar el sistema:**
+- Conexión a base de datos real.
+- Inferencias trazables.
+- Explicabilidad de decisiones.
+- Interacción usuario-sistema.
+- Arquitectura funcional cliente-servidor o local.
+
+
 
 --
 
