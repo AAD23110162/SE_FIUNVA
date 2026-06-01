@@ -145,6 +145,22 @@
 - **IA / Razonamiento:** Gemini 2.5 Flash y Gemini 2.5 Pro, con apoyo de LangChain si se requiere orquestación híbrida.
 - **Motor de inferencia:** Reglas explícitas almacenadas en Firestore y aplicadas por un agente especializado.
 
+**UI/UX en desarrollo:**
+- La interfaz actual está construida en React con Vite y un sistema visual responsivo pensado para operación local y futura conexión con Firestore/Firebase.
+- El diseño usa modo claro/oscuro, tipografías limpias y un estilo de consola técnica para comunicar que el sistema es una herramienta de ingeniería y no un chatbot genérico.
+- La navegación principal se divide en dos experiencias: **vista de cliente** y **consola de administrador**.
+- En la **vista de cliente** se trabaja un chat de consultas con mensajes tipo burbuja, sugerencias rápidas, validación de cliente registrado, selección de tipo de cliente y despliegue del estado de la interacción en tiempo real.
+- La sección de cliente permite simular el flujo de atención, captura de solicitud, respuesta automática y explicación del sistema experto.
+- En la **consola de administrador** se concentra el control operativo del sistema: bandeja de cotizaciones, directorio técnico del catálogo, visualizador de colecciones y flujo de agentes.
+- La consola administrativa está pensada para auditar solicitudes, aprobar o rechazar cotizaciones, ajustar tarifas, editar referencias técnicas y revisar documentos persistidos.
+- El componente de **flujo de agentes** muestra el razonamiento paso a paso de Atención al Cliente, Generador de Pedido y Supervisor Explicador.
+- El componente de **bandeja de cotizaciones** permite inspeccionar el historial, detalle de componentes, descuentos, impuestos y trazabilidad de inferencias.
+- El componente de **directorio técnico** permite mantener el catálogo maestro de componentes y servicios, incluyendo edición de nombres, precios, descripciones y enlaces de referencia web.
+- El componente de **visualización de base de datos** expone colecciones tipo Firestore en formato legible para fortalecer la trazabilidad y el entendimiento técnico del sistema.
+- La experiencia actual también contempla estados de cliente nuevo, integrado y registrado, con validación simple de código de cliente y descuentos diferenciados.
+- A nivel visual, la interfaz está orientada a una presentación de consultoría tecnológica: limpia, técnica, densa en información útil y enfocada en explicar decisiones.
+- Esta capa UI/UX debe verse como prototipo funcional y base de la futura entrega de prototipado visual, mockups y refinamiento de interacción.
+
 **Estructura recomendada del repositorio:**
 - **/src:** Código fuente de agentes y servicios.
 - **/data:** Esquemas y dumps de bases de datos o datasets.
