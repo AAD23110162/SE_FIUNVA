@@ -227,5 +227,49 @@ Customer      Inference      Proposal      Supervisor
 
 
 
+**Definición y tareas de agentes**
+
+La siguiente sección describe propiedades, dependencias y tareas mínimas para los agentes del sistema SE-FIUNVA.
+
+- **Agente — Atención al Cliente**
+  - Propósito: Punto de entrada conversacional (NLU, extracción de slots, clasificación de intención y enrutado).
+  - Propiedades: `id`, `name`, `channel` (Telegram/WhatsApp/Web), `language`, `session_id`, `last_interaction`, `intent`, `entities`, `confidence`, `context_window`, `policy_threshold`.
+  - Dependencias: modelo NLU (Gemini/LLM), colección `conversations`, colección `clients`, colección `rules`.
+  - Tareas: recibir mensaje → detectar intención → extraer entidades/slots → completar o pedir clarificación → crear draft en `quotes` (si es cotización) o ticket (si es soporte) → enrutar al agente correspondiente.
+  - Reglas: si `confidence` < threshold → pedir confirmación humana; detectar urgencia → marcar prioridad.
+  - Salida: entrada en `conversations` con `intent`, `entities` y `explanation` (IDs de reglas usadas).
+
+- **Agente — Captura y Validación de Datos de Cotización**
+  - Propósito: Recoger y validar todos los datos necesarios para una cotización técnica y su factibilidad.
+  - Propiedades: `quote_id`, `status` (draft/validated/rejected), `required_fields` (client_id, items[], qty, deadline, budget), `validation_errors`, `validator_confidence`, `related_conversation`.
+  - Dependencias: `knowledge_base`, `rules`, `inventory`, `clients`, motor de inferencia.
+  - Tareas: recibir draft → validar campos obligatorios → chequear stock/compatibilidad/lead-times → aplicar reglas (descuentos, requisitos de anticipo) → estimar horas y costos base → marcar `validated` o devolver aclaraciones.
+  - Persistencia: guardar versiones en `quotes` y enlazar a `projects` si avanza a pedido.
+  - Salida: `quotes/{quote_id}` con `line_items`, `cost_estimate` y `inference_trace`.
+
+- **Agente — Generador de Informe de Cotización y Envío**
+  - Propósito: Crear documento formal (PDF/HTML) de cotización con explicaciones y enviarlo por correo para revisión y validación.
+  - Propiedades: `quote_id`, `template_id`, `document_url`, `email_status` (pending/sent/failed), `expiry`, `signed_token`.
+  - Dependencias: `quotes`, `documents` storage (Cloud Storage), motor de templating/PDF, servicio de correo (SMTP/SendGrid), `Supervisor` para explicabilidad.
+  - Tareas: obtener `quote` validada → generar documento con `inference_trace` → crear PDF y attachments técnicos → enviar email con enlace seguro y `approval_link` → actualizar `quotes.status` y registrar `email_log`.
+  - Seguridad: enlaces firmados y expirables; reintentos de envío y notificación de bounce.
+  - Salida: registro en `documents` y log de envío.
+
+- **Agente — Gestor de Documentación de Proyectos**
+  - Propósito: Controlar acceso y responder consultas semánticas sobre documentación del proyecto usando código de pedido como autenticación mínima.
+  - Propiedades: `project_id`, `docs[]` (metadatos), `access_codes`, `permissions`, `vector_index_ref`, `version`, `access_log`.
+  - Dependencias: `projects`, `documents` collection, embeddings store / vector DB, Firestore, pipeline RAG.
+  - Tareas: solicitar `pedido_code` → verificar permisos → recuperar documentos relevantes → realizar búsqueda semántica → devolver snippets citados con referencias y explicación del origen → registrar acceso.
+  - Seguridad: expiración de códigos, rate limiting, auditoría de accesos.
+
+**Requisitos transversales entre agentes**
+- Trazabilidad y explicabilidad: todas las acciones deberán incluir un `inference_trace` con IDs de reglas y pasos de inferencia, almacenado en las colecciones relevantes.
+- Formato de mensajes entre agentes: JSON estandarizado con `source_agent`, `target_agent`, `payload`, `correlation_id`, `explanation`.
+- Persistencia mínima: colecciones `conversations`, `quotes`, `projects`, `rules`, `documents`, `access_logs`, `inventory`.
+- Seguridad: autenticación (Firebase Auth / JWT), autorización por roles, tokens y enlaces firmados para recursos sensibles.
+- Monitoreo: logs de errores, métricas de latencia, tasa de escalado a humano y tasa de validación automática.
+- Pruebas sugeridas: flujo completo de cotización, acceso a docs con código inválido/válido, envío de correo fallido y reintentos.
+
+--
 --
 
