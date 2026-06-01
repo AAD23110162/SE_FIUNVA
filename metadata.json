@@ -1,0 +1,6 @@
+{
+  "name": "FIUNVA - Sistema Experto",
+  "description": "Sistema experto multi-agente inteligente de consultoría tecnológica para proyectos de electrónica, robótica y software.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

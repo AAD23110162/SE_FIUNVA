@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Catch-All Safety Net (Default-Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+    
+    // Reusable global security helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    
+    // Helper to evaluate administrative or staff access via document query
+    function isStaff() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'operator' || 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    // --- Users Profiles Partition ---
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId 
+        && request.resource.data.keys().hasAll(['uid', 'name', 'email', 'role', 'clientTier']) 
+        && request.resource.data.role == 'client'; // Prevent self-elevating privileges
+        
+      allow update: if isSignedIn() && request.auth.uid == userId 
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'clientTier']))
+        || isStaff(); // Only staff can modify levels or roles
+    }
+
+    // --- Catalog and Stock Levels ---
+    match /products/{productId} {
+      allow read: if true; // Products can be viewed by potential clients without auth
+      allow write: if isStaff(); // Only certified staff can restock or modify pricing
+    }
+
+    // --- Agent Generated Orders Queue ---
+    match /orders/{orderId} {
+      allow read: if isSignedIn() && (resource.data.clientId == request.auth.uid || isStaff());
+      allow create: if isSignedIn() && request.resource.data.clientId == request.auth.uid;
+      
+      // Updates represent status transitions (e.g., operator approvals / rejections)
+      allow update: if isStaff() 
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && resource.data.status == 'pending_approval'; // Terminal state lock prevention
+        
+      allow delete: if false; // Orders are audit records and cannot be expunged
+    }
+  }
+}

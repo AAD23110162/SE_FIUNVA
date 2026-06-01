@@ -1,0 +1,126 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "Colaborador o Cliente FIUNVA",
+      "description": "Perfil de usuario autenticado con roles de acceso y clasificación técnica de cliente.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Identificador único de usuario generado por autenticación."
+        },
+        "name": {
+          "type": "string",
+          "description": "Nombre legible del usuario u operador."
+        },
+        "email": {
+          "type": "string",
+          "description": "Correo electrónico de registro corporativo."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["client", "operator", "admin"],
+          "description": "Rol de acceso del sistema experto: Cliente, Operador de Pedidos, o Coordinador de Inventarios."
+        },
+        "clientTier": {
+          "type": "string",
+          "enum": ["standard", "frequent", "vip"],
+          "description": "Nivel de descuento preferencial asignado al cliente."
+        }
+      },
+      "required": ["uid", "name", "email", "role", "clientTier"]
+    },
+    "Product": {
+      "title": "Insumo o Servicio en Catálogo",
+      "description": "Componente electrónico, kit de robótica o servicio de consultoría tecnológica comercializado por FIUNVA.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Código identificador clave (ej: motor_nema17)."
+        },
+        "name": {
+          "type": "string",
+          "description": "Nombre comercial del componente o servicio."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["electronics", "robotics", "software_service", "bundles"]
+        },
+        "description": {
+          "type": "string",
+          "description": "Detalles técnicos, límites, voltaje u horas del servicio."
+        },
+        "price": {
+          "type": "number",
+          "description": "Costo unitario en MXN/USD."
+        },
+        "stock": {
+          "type": "integer",
+          "description": "Cantidad de piezas físicas en bodega de FIUNVA."
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unidad de medida (pza, servicio, hora)."
+        }
+      },
+      "required": ["id", "name", "category", "price", "stock", "unit"]
+    },
+    "Order": {
+      "title": "Pedido Inteligente",
+      "description": "Cotización analizada y estructurada por la colaboración del sistema multi-agente en FIUNVA.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "ID asignado con prefijo ORD-XXXX."
+        },
+        "clientId": {
+          "type": "string"
+        },
+        "clientName": {
+          "type": "string"
+        },
+        "clientTier": {
+          "type": "string",
+          "enum": ["standard", "frequent", "vip"]
+        },
+        "subtotal": {
+          "type": "number"
+        },
+        "discountTotal": {
+          "type": "number"
+        },
+        "tax": {
+          "type": "number"
+        },
+        "total": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending_approval", "approved", "rejected"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "clientId", "clientName", "clientTier", "subtotal", "total", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Perfiles asignados en el sistema experto."
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Catálogo de repuestos e insumos disponibles."
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Historial y cola de validaciones de órdenes generadas por los agentes."
+    }
+  }
+}
