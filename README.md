@@ -161,6 +161,65 @@
 - A nivel visual, la interfaz está orientada a una presentación de consultoría tecnológica: limpia, técnica, densa en información útil y enfocada en explicar decisiones.
 - Esta capa UI/UX debe verse como prototipo funcional y base de la futura entrega de prototipado visual, mockups y refinamiento de interacción.
 
+**Informe de prototipado y diseño de interfaz:**
+
+El prototipado del Sistema Experto FIUNVA se planteó como una fase previa a la implementación definitiva para validar la navegación, la jerarquía de la información y la interacción entre cliente y administrador antes de consolidar la capa de producción. La prioridad fue convertir ideas abstractas en una interfaz tangible, útil para revisar la experiencia del usuario, detectar fricción temprana y mantener coherencia entre el discurso técnico del proyecto y su comportamiento visual.
+
+**Objetivo del prototipado:**
+- Reducir el costo de cambio detectando problemas de flujo antes de la entrega final.
+- Validar que el modelo mental del usuario coincida con la lógica del sistema experto.
+- Alinear al equipo de desarrollo con una misma referencia visual y funcional.
+- Confirmar que las interacciones principales se puedan traducir a lógica real en React y backend.
+
+**Criterio de diseño adoptado:**
+- Se eligió una estética industrial y sobria, con contraste controlado, para reforzar el carácter técnico de FIUNVA.
+- Se priorizó una interfaz de alta legibilidad, con tipografía clara y componentes visuales que separan con precisión las áreas de consulta, administración y auditoría.
+- Se evitó el enfoque de maqueta estática; la interfaz se desarrolló como prototipo vivo para probar acciones reales sobre datos, catálogo y cotizaciones.
+
+**Justificación tecnológica del prototipado en código:**
+- En este proyecto, el prototipado se realizó directamente sobre la base de una aplicación React con servidor Express, por lo que la interfaz no solo muestra pantallas, sino que ejecuta lógica real.
+- Este enfoque permite validar formularios, filtros, cambios de estado, consultas de catálogo y auditoría sin depender de diagramas desconectados del sistema.
+- La ventaja principal es que el diseño visual y la lógica funcional evolucionan juntos, reduciendo la brecha entre diseño y desarrollo.
+
+**Flujo de planificación de interfaz:**
+
+```text
+[Definición de Requerimientos] -> [Maquetación de Arquitectura] -> [Identidad Visual y Tipografía] -> [Iteración y Validación de Roles]
+```
+
+**Estructura visual del prototipo:**
+- **Vista de cliente:** chat de consultas, preguntas rápidas, estado de registro y respuesta automática.
+- **Vista de administrador:** consola técnica con bandeja de cotizaciones, directorio de catálogo y visualización de colecciones.
+- **Flujo de agentes:** panel de estado con el razonamiento de Atención al Cliente, Generador de Pedido y Supervisor Explicador.
+- **Base de datos visual:** explorador de colecciones con documentos en formato legible.
+
+**Galería de prototipado:**
+
+**1. Vista de cliente - captura 1**
+
+![Vista de cliente en modo oscuro](Imagenes/Prototipado/001_Cliente_Claro.png)
+
+**2. Vista de cliente - captura 2**
+
+![Vista de cliente en modo claro y móvil](Imagenes/Prototipado/002_Cliente_Oscuro.png)
+
+**3. Adaptación móvil de la experiencia del cliente**
+
+![Adaptación móvil de la experiencia del cliente](Imagenes/Prototipado/003_Cliente_Celular.png)
+
+**4. Consola de administrador - captura 1**
+
+![Consola de administrador en modo claro](Imagenes/Prototipado/004_Admin_Claro.png)
+
+**5. Consola de administrador - captura 2**
+
+![Consola de administrador en modo oscuro](Imagenes/Prototipado/005_Admin_Oscuro.png)
+
+**Conclusión del prototipado:**
+- El prototipo demuestra que FIUNVA puede operar como una plataforma de consultoría tecnológica con una experiencia de usuario clara y diferenciada por roles.
+- La interfaz ya comunica la identidad del sistema experto y permite validar el flujo básico de atención, administración y auditoría.
+- Esta versión prototípica sirve como base para la entrega de UI/UX final, documentación visual y refinamiento de interacción.
+
 **Estructura recomendada del repositorio:**
 - **/src:** Código fuente de agentes y servicios.
 - **/data:** Esquemas y dumps de bases de datos o datasets.
