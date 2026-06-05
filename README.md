@@ -337,6 +337,87 @@ La siguiente sección describe propiedades, dependencias y tareas mínimas para 
   - Tareas: solicitar `pedido_code` → verificar permisos → recuperar documentos relevantes → realizar búsqueda semántica → devolver snippets citados con referencias y explicación del origen → registrar acceso.
   - Seguridad: expiración de códigos, rate limiting, auditoría de accesos.
 
+**Arquitectura de interacción entre agentes**
+
+Los agentes no son procesos aislados: constituyen una orquesta coordinada por un bus de mensajes y/o llamadas HTTP internas. La interacción está diseñada para ser modular, asíncrona y trazable.
+
+- Orquestador (coordina por defecto): un componente ligero en `Firebase Functions` o el `server.ts` en prototipo que recibe la entrada del usuario y distribuye tareas a los agentes.
+- Canal de comunicación: JSON sobre HTTP (API internas) o mensajes en cola (Pub/Sub) para producción.
+- Persistencia intermedia: cada paso importante escribe en colecciones (`conversations`, `quotes`, `orders`, `documents`) con `correlation_id` para trazabilidad.
+
+Flujo general (resumen):
+1. Cliente envía mensaje → Orquestador recibe y crea `conversation`.
+2. Orquestador invoca **Agente Atención al Cliente** para NLU y extracción de slots.
+3. Resultado → guarda `conversation` y notifica a **Agente Captura/Validación** con `correlation_id`.
+4. **Agente Captura/Validación** aplica reglas, consulta `inventory` y `knowledge_base`, luego genera un `quote` preliminar y escribe `quotes/{id}`.
+5. **Agente Generador de Informe** toma `quotes/{id}`, crea documento (PDF/HTML) y envía email con `approval_link`.
+6. **Agente Supervisor** revisa `inference_trace`, genera explicación legible y actualiza `quotes.{id}.status`.
+7. Si se aprueba, orquestador invoca la rutina de aprobación que deduce stock y crea/actualiza `orders`.
+
+**Protocolo de mensajes (json mínimo entre agentes)**
+
+```json
+{
+  "correlation_id": "ORD-1234",
+  "source_agent": "agent1",
+  "target_agent": "agent2",
+  "payload": {
+    "client": { "id": "usr-001", "tier": "vip" },
+    "extracted_items": [{ "productId": "motor_nema17", "qty": 3 }]
+  },
+  "explanation": ["R_TIER_15","R_VOLUME_10"]
+}
+```
+
+Cada agente debe devolver al orquestador un objeto con: `status` (ok|fail), `data` (resultado), `inference_trace` (lista de reglas aplicadas) y `errors` (si existen).
+
+**Secuencia típica: Cotización automatizada**
+
+```mermaid
+sequenceDiagram
+  participant Cliente
+  participant Orquestador
+  participant Agente1 as Atención
+  participant Agente2 as Captura/Validador
+  participant Agente3 as GeneradorInforme
+  participant Supervisor
+
+  Cliente->>Orquestador: Mensaje ("Necesito 3 motores NEMA17")
+  Orquestador->>Agente1: Analizar texto
+  Agente1-->>Orquestador: Intent + Entities
+  Orquestador->>Agente2: Crear draft cotización
+  Agente2-->>Orquestador: Quote{id, line_items, trace}
+  Orquestador->>Agente3: Generar documento y enviar email
+  Agente3-->>Orquestador: document_url, email_log
+  Orquestador->>Supervisor: Solicitar explicación final
+  Supervisor-->>Orquestador: reasoning_trace, summary
+  Orquestador-->>Cliente: Mensaje final + link a cotización
+```
+
+**Reglas de negocio y escalado**
+
+- Si `confidence` del NLU < 0.6 → Agente Atención solicita aclaración al cliente y la interacción queda en estado `awaiting_clarification`.
+- Si Agente Captura detecta `stock < qty` → añade `stockWarning` en `quote` y marca `requires_restock`.
+- Si `quote.total > threshold_autovalidation` → marcar `requires_manual_approval` y notificar operador.
+- Errores transversales: si un agente falla por timeout o excepción, el orquestador guarda `automation_error` y encola notificación a un canal humano (email/Slack) y responde al cliente con un mensaje amable.
+
+**Trazabilidad y explicabilidad (requisitos operativos)**
+
+- `inference_trace` debe incluir: `rule_id`, `description`, `input_snapshot`, `timestamp`, `agent_id`.
+- Todos los mensajes deben incluir `correlation_id` y un `parent_id` para reconstruir el grafo de decisiones.
+- Guardar un `audit_log` por cada transición crítica (creación de quote, envío de email, aprobación/rechazo).
+
+**Ejemplo de `inference_trace` (estructura)**
+
+```json
+[
+  {"rule_id":"R014","desc":"Si motores>4 -> sugerir driver dedicado","agent":"agent2","ts":"2026-06-01T12:10:00Z"},
+  {"rule_id":"R_TIER_15","desc":"Cliente VIP -> 15% descuento","agent":"agent2","ts":"2026-06-01T12:10:01Z"}
+]
+```
+
+Con esto la cadena de decisiones es inspeccionable por humanos y reproducible en auditoría.
+
 **Requisitos transversales entre agentes**
 - Trazabilidad y explicabilidad: todas las acciones deberán incluir un `inference_trace` con IDs de reglas y pasos de inferencia, almacenado en las colecciones relevantes.
 - Formato de mensajes entre agentes: JSON estandarizado con `source_agent`, `target_agent`, `payload`, `correlation_id`, `explanation`.
