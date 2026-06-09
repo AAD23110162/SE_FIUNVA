@@ -23,7 +23,11 @@ import {
   Settings,
   Cog,
   ShieldAlert,
-  FolderOpen
+  FolderOpen,
+  User,
+  Layers,
+  DollarSign,
+  Search
 } from "lucide-react";
 import { Product, Order, UserProfile, Message, AgentStep, UserRole } from "./types";
 import AgentStatusFlow from "./components/AgentStatusFlow";
@@ -48,7 +52,7 @@ export default function App() {
   const [isLocalFallback, setIsLocalFallback] = useState(false);
 
   // Multi-currency operational states
-  const [currentCurrency, setCurrentCurrency] = useState<"USD" | "MXN" | "EUR">("USD");
+  const [currentCurrency, setCurrentCurrency] = useState<"USD" | "MXN" | "EUR">("MXN");
   const [exchangeRates, setExchangeRates] = useState<Record<"USD" | "MXN" | "EUR", number>>({
     USD: 1.0,
     MXN: 17.50,
@@ -109,7 +113,7 @@ export default function App() {
     {
       id: "msg-welcome",
       sender: "agent",
-      text: "¡Hola! Bienvenido a FIUNVA Consultores Tecnológicos. Nos especializamos en proyectos y desarrollo de electrónica de alta precisión, robótica y desarrollo de software embebido.\n\nEscribe qué componentes, cantidades o servicios requieres para tu circuito, y nuestro sistema experto multi-agente formulará una propuesta técnica aplicando optimización de precios y referencias en tiempo real.",
+      text: "¡Hola! ¿En qué podemos ayudarte el día de hoy?",
       timestamp: new Date().toISOString()
     }
   ]);
@@ -130,6 +134,8 @@ export default function App() {
     step: "none" | "waiting_name" | "waiting_code";
     tempName?: string;
   }>({ step: "none" });
+
+  const [quotePendingQuery, setQuotePendingQuery] = useState<string | null>(null);
 
   const activeProfile: UserProfile = activeRole === "admin" ? {
     uid: "usr_admin",
@@ -163,7 +169,7 @@ export default function App() {
 
   // Adjust scroll when chatting
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [chatHistory, isGenerating]);
 
   // Fetch products catalogue
@@ -236,92 +242,28 @@ export default function App() {
     }
   };
 
-  // Submit request to server agents
-  const handleSendChat = async (overrideText?: string) => {
-    const query = overrideText ? overrideText.trim() : inputText.trim();
-    if (!query) return;
+  const handleSelectCurrency = async (curr: "USD" | "MXN" | "EUR") => {
+    if (!quotePendingQuery) return;
+    const targetQ = quotePendingQuery;
+    setQuotePendingQuery(null);
 
-    if (!overrideText) {
-      setInputText("");
-    }
-
-    // 1. Append user prompt to bubble listings
+    // Append user selection bubble
     const userMsg: Message = {
-      id: `msg-usr-${Date.now()}`,
+      id: `msg-usr-curr-${Date.now()}`,
       sender: "client",
-      text: query,
+      text: `Quiero mi cotización en ${curr === "MXN" ? "Pesos Mexicanos (MXN)" : curr === "USD" ? "Dólares (USD)" : "Euros (EUR)"}`,
       timestamp: new Date().toISOString()
     };
     setChatHistory((prev) => [...prev, userMsg]);
 
-    // Handle interactive validation for registered clients inside the chatbot dialog
-    if (registrationState.step === "waiting_name") {
-      setIsGenerating(true);
-      setTimeout(() => {
-        setRegistrationState({ step: "waiting_code", tempName: query });
-        const botMsg: Message = {
-          id: `msg-reg-code-${Date.now()}`,
-          sender: "agent",
-          text: `Mucho gusto, **${query}**. Por favor, escribe tu Código de Cliente para corroborar tu registro (ej: VIP-777, INT-101, FIU-999 o cualquier código de referencia):`,
-          timestamp: new Date().toISOString()
-        };
-        setChatHistory((prev) => [...prev, botMsg]);
-        setIsGenerating(false);
-      }, 700);
-      return;
-    }
+    // Change current app currency and reload live rates if needed
+    await handleCurrencyChange(curr);
 
-    if (registrationState.step === "waiting_code") {
-      setIsGenerating(true);
-      setTimeout(() => {
-        const finalName = registrationState.tempName || "Cliente Registrado";
-        if (query.trim().length < 3) {
-          const errBotMsg: Message = {
-            id: `msg-reg-err-${Date.now()}`,
-            sender: "agent",
-            text: `⚠️ El código "${query}" no tiene un formato válido o no está registrado. Debe tener al menos 3 caracteres (ej: VIP-777, CAR-123). Inténtalo de nuevo ingresando tu código de cliente:`,
-            timestamp: new Date().toISOString()
-          };
-          setChatHistory((prev) => [...prev, errBotMsg]);
-          setIsGenerating(false);
-          return;
-        }
+    // Now execute the actual quotation with selected currency passed to backend
+    await executeQuoteChat(targetQ, curr);
+  };
 
-        setClientType("registrado");
-        setRegisteredName(finalName);
-        setClientCode(query);
-        setRegistrationState({ step: "none" });
-
-        const okBotMsg: Message = {
-          id: `msg-reg-ok-${Date.now()}`,
-          sender: "agent",
-          text: `¡Validación de Cliente Exitosa! 🎉\n\nBienvenido, **${finalName}**. Tu perfil ha sido sincronizado bajo el código **${query}**.\n\nHemos actualizado tu rol a **Cliente: ${finalName}**, otorgándote un **15% de descuento VIP automático** en todos tus componentes, sensores, robótica y servicios de desarrollo inteligente.`,
-          timestamp: new Date().toISOString()
-        };
-        setChatHistory((prev) => [...prev, okBotMsg]);
-        setIsGenerating(false);
-      }, 900);
-      return;
-    }
-
-    // Trigger registration wizard if choice clicked
-    if (query.trim().toLowerCase() === "soy cliente registrado" || query === "Soy cliente registrado") {
-      setIsGenerating(true);
-      setTimeout(() => {
-        setRegistrationState({ step: "waiting_name" });
-        const botMsg: Message = {
-          id: `msg-reg-start-${Date.now()}`,
-          sender: "agent",
-          text: "¡Perfecto, procedamos con tu validación! Por favor escribe tu **Nombre Completo** tal como aparece en tu registro:",
-          timestamp: new Date().toISOString()
-        };
-        setChatHistory((prev) => [...prev, botMsg]);
-        setIsGenerating(false);
-      }, 600);
-      return;
-    }
-
-    // 2. Set parallel multi-agent activity indicators
+  const executeQuoteChat = async (queryText: string, quoteCurrency: "USD" | "MXN" | "EUR") => {
     setIsGenerating(true);
     setAgentSteps([
       { agentName: "Atención al Cliente", status: "thinking", output: "Escuchando intenciones..." },
@@ -330,13 +272,13 @@ export default function App() {
     ]);
 
     try {
-      // 3. POST and wait server response
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: query,
-          clientProfile: activeProfile
+          message: queryText,
+          clientProfile: activeProfile,
+          currency: quoteCurrency
         })
       });
 
@@ -437,6 +379,267 @@ export default function App() {
     }
   };
 
+  // Submit request to server agents
+  const handleSendChat = async (overrideText?: string) => {
+    const query = overrideText ? overrideText.trim() : inputText.trim();
+    if (!query) return;
+
+    if (!overrideText) {
+      setInputText("");
+    }
+
+    // 1. Append user prompt to bubble listings
+    const userMsg: Message = {
+      id: `msg-usr-${Date.now()}`,
+      sender: "client",
+      text: query,
+      timestamp: new Date().toISOString()
+    };
+    setChatHistory((prev) => [...prev, userMsg]);
+
+    // Handle interactive validation for registered clients inside the chatbot dialog
+    if (registrationState.step === "waiting_name") {
+      setIsGenerating(true);
+      setTimeout(() => {
+        setRegistrationState({ step: "waiting_code", tempName: query });
+        const botMsg: Message = {
+          id: `msg-reg-code-${Date.now()}`,
+          sender: "agent",
+          text: `Mucho gusto, **${query}**. Por favor, escribe tu Código de Cliente para corroborar tu registro (ej: VIP-777, INT-101, FIU-999 o cualquier código de referencia):`,
+          timestamp: new Date().toISOString()
+        };
+        setChatHistory((prev) => [...prev, botMsg]);
+        setIsGenerating(false);
+      }, 700);
+      return;
+    }
+
+    if (registrationState.step === "waiting_code") {
+      setIsGenerating(true);
+      setTimeout(() => {
+        const finalName = registrationState.tempName || "Cliente Registrado";
+        if (query.trim().length < 3) {
+          const errBotMsg: Message = {
+            id: `msg-reg-err-${Date.now()}`,
+            sender: "agent",
+            text: `⚠️ El código "${query}" no tiene un formato válido o no está registrado. Debe tener al menos 3 caracteres (ej: VIP-777, CAR-123). Inténtalo de nuevo ingresando tu código de cliente:`,
+            timestamp: new Date().toISOString()
+          };
+          setChatHistory((prev) => [...prev, errBotMsg]);
+          setIsGenerating(false);
+          return;
+        }
+
+        setClientType("registrado");
+        setRegisteredName(finalName);
+        setClientCode(query);
+        setRegistrationState({ step: "none" });
+
+        const okBotMsg: Message = {
+          id: `msg-reg-ok-${Date.now()}`,
+          sender: "agent",
+          text: `¡Validación de Cliente Exitosa! 🎉\n\nBienvenido, **${finalName}**. Tu perfil ha sido sincronizado bajo el código **${query}**.\n\nHemos actualizado tu rol a **Cliente: ${finalName}**, otorgándote un **15% de descuento VIP automático** en todos tus componentes, sensores, robótica y servicios de desarrollo inteligente.`,
+          timestamp: new Date().toISOString()
+        };
+        setChatHistory((prev) => [...prev, okBotMsg]);
+        setIsGenerating(false);
+      }, 900);
+      return;
+    }
+
+    // Trigger registration wizard if choice clicked
+    if (query.trim().toLowerCase() === "soy cliente registrado" || query === "Soy cliente registrado") {
+      setIsGenerating(true);
+      setTimeout(() => {
+        setRegistrationState({ step: "waiting_name" });
+        const botMsg: Message = {
+          id: `msg-reg-start-${Date.now()}`,
+          sender: "agent",
+          text: "¡Perfecto, procedamos con tu validación! Por favor escribe tu **Nombre Completo** tal como aparece en tu registro:",
+          timestamp: new Date().toISOString()
+        };
+        setChatHistory((prev) => [...prev, botMsg]);
+        setIsGenerating(false);
+      }, 600);
+      return;
+    }
+
+    // Intercept quote pending currency selection if user is replying as text
+    if (quotePendingQuery) {
+      const lower = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      let detectedCurr: "USD" | "MXN" | "EUR" | null = null;
+      if (lower.includes("mxn") || lower.includes("peso") || lower.includes("mexicanos")) {
+        detectedCurr = "MXN";
+      } else if (lower.includes("usd") || lower.includes("dolar") || lower.includes("dólar") || lower.includes("americanos")) {
+        detectedCurr = "USD";
+      } else if (lower.includes("eur") || lower.includes("euro") || lower.includes("euros")) {
+        detectedCurr = "EUR";
+      }
+
+      if (detectedCurr) {
+        await handleSelectCurrency(detectedCurr);
+      } else {
+        setIsGenerating(true);
+        setTimeout(() => {
+          const repromptMsg: Message = {
+            id: `msg-curr-reprompt-${Date.now()}`,
+            sender: "agent",
+            text: "⚠️ No pude identificar tu divisa seleccionada. Por favor escribe **MXN**, **USD**, o **EUR** (o haz clic en los botones de selección que ves abajo) para continuar con tu cotización.",
+            timestamp: new Date().toISOString()
+          };
+          setChatHistory((prev) => [...prev, repromptMsg]);
+          setIsGenerating(false);
+        }, 600);
+      }
+      return;
+    }
+
+    // Identify if this query wants to make a quotation request
+    const isQuoteIntent = (text: string) => {
+      const lower = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return (
+        lower.includes("cotizar") ||
+        lower.includes("cotizacion") ||
+        lower.includes("presupuesto") ||
+        lower.includes("quiero comprar") ||
+        lower.includes("proyecto de robotica") ||
+        lower.includes("comprar") ||
+        lower.includes("precio") ||
+        lower.includes("adquirir") ||
+        lower.includes("cuanto cuesta")
+      );
+    };
+
+    if (isQuoteIntent(query)) {
+      setQuotePendingQuery(query);
+      setIsGenerating(true);
+      setTimeout(() => {
+        const botMsg: Message = {
+          id: `msg-curr-select-${Date.now()}`,
+          sender: "agent",
+          text: `¡Excelente iniciativa! Con gusto realizaré la cotización de tus componentes y servicios mediante nuestro sistema experto de agentes en tiempo real.
+
+Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas que sea procesada tu cotización**:`,
+          timestamp: new Date().toISOString()
+        };
+        setChatHistory((prev) => [...prev, botMsg]);
+        setIsGenerating(false);
+      }, 700);
+      return;
+    }
+
+    // 2. Set parallel multi-agent activity indicators for general queries
+    setIsGenerating(true);
+    setAgentSteps([
+      { agentName: "Atención al Cliente", status: "thinking", output: "Escuchando intenciones..." },
+      { agentName: "Generador de Pedido", status: "idle", output: "Buscando referencias..." },
+      { agentName: "Supervisor Explicador", status: "idle", output: "Tratando compatibilidad..." }
+    ]);
+
+    try {
+      // 3. POST and wait server response (general chat route without hard currency locks)
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: query,
+          clientProfile: activeProfile,
+          currency: currentCurrency
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Agentes devolvieron un error de ejecución.");
+      }
+
+      const result = await response.json();
+      const results = result.agentResults;
+      setIsLocalFallback(!!result.isLocalFallback);
+
+      // Stagger steps animation sequence
+      setTimeout(() => {
+        setAgentSteps([
+          {
+            agentName: "Atención al Cliente",
+            status: "completed",
+            output: `Mapeado. Intento: "${results.agent1?.intent || 'Pregunta General'}"`
+          },
+          {
+            agentName: "Generador de Pedido",
+            status: "thinking",
+            output: `Efectuando consulta técnica y aplicando reglas de negocio...`
+          },
+          { agentName: "Supervisor Explicador", status: "idle", output: "" }
+        ]);
+
+        setTimeout(() => {
+          setAgentSteps([
+            {
+              agentName: "Atención al Cliente",
+              status: "completed",
+              output: `Intención: "${results.agent1?.intent || 'Pregunta General'}"`
+            },
+            {
+              agentName: "Generador de Pedido",
+              status: "completed",
+              output: `Verificaciones completadas.`
+            },
+            {
+              agentName: "Supervisor Explicador",
+              status: "thinking",
+              output: `Generando síntesis explicativa...`
+            }
+          ]);
+
+          setTimeout(() => {
+            setAgentSteps([
+              { agentName: "Atención al Cliente", status: "completed", output: "Consulta clasificada" },
+              { agentName: "Generador de Pedido", status: "completed", output: "Análisis experto exitoso" },
+              { agentName: "Supervisor Explicador", status: "completed", output: "Respuesta compilada." }
+            ]);
+
+            // Append final agent reply
+            const finalReplyText = results.agent1.clientResponse || "Procesado correctamente.";
+            const salesBlock = results.agent3.salesSummary ? `\n\n**${results.agent3.salesSummary}**` : "";
+            const ordMessage = result.orderCreated ? `\n\n*Nota del sistema:* Cotización registrada bajo el ID **${result.orderCreated.id}** en estatus pendiente.` : "";
+            
+            setChatHistory((prev) => [
+              ...prev,
+              {
+                id: `msg-agn-${Date.now()}`,
+                sender: "agent",
+                text: `${finalReplyText}${salesBlock}${ordMessage}`,
+                timestamp: new Date().toISOString()
+              }
+            ]);
+
+            if (result.orders) setOrders(result.orders);
+            setIsGenerating(false);
+
+          }, 1000);
+        }, 1000);
+      }, 800);
+
+    } catch (error) {
+      console.error(error);
+      setIsGenerating(false);
+      setAgentSteps([
+        { agentName: "Atención al Cliente", status: "error", output: "Falla de red." },
+        { agentName: "Generador de Pedido", status: "error", output: "Invocación truncada." },
+        { agentName: "Supervisor Explicador", status: "error", output: "Error." }
+      ]);
+      setChatHistory((prev) => [
+        ...prev,
+        {
+          id: `msg-err-${Date.now()}`,
+          sender: "agent",
+          text: "⚠️ Encontramos una interrupción en el servidor de agentes. Asegúrese de reactivar el servidor o intente nuevamente.",
+          timestamp: new Date().toISOString()
+        }
+      ]);
+    }
+  };
+
   // Predefined suggestion buttons as exact requested by the user
   const quickQuestions = [
     {
@@ -458,83 +661,89 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-300">
+    <div className="min-h-screen bg-[#f8fafc] dark:bg-[#030712] text-slate-800 dark:text-slate-100 transition-colors duration-300">
       
-      {/* Primary Header block with clickable Easter Egg brand logo */}
-      <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs transition-colors duration-300">
+      {/* Primary Header block styled identically to the mockup */}
+      <header className="sticky top-0 z-40 bg-white/95 dark:bg-[#070c19]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 px-3 sm:px-6 py-3 sm:py-4 flex flex-row items-center justify-between gap-4 shadow-sm transition-colors duration-300">
         
-        {/* Branding block (Click area for opening Admin view) */}
+        {/* Branding block matching the image */}
         <div 
           onClick={() => {
             setActiveRole(activeRole === "client" ? "admin" : "client");
           }}
-          className="flex items-center gap-3 cursor-pointer select-none group border border-transparent hover:border-slate-250 dark:hover:border-slate-800 p-2 rounded-2xl transition-all hover:bg-slate-50 dark:hover:bg-slate-950"
-          title="Haga clic aquí en el logotipo de FIUNVA para acceder a la zona técnica de administrador"
+          className="flex items-center gap-2 sm:gap-3 cursor-pointer select-none group transition-all"
+          title="Haga clic para alternar con el modo Administrador/Técnico"
         >
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-650 flex items-center justify-center text-white font-black text-xl shadow-md font-mono tracking-tighter ring-2 ring-blue-500/10 group-hover:scale-105 transition-all">
-            F
+          <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#070c19] flex items-center justify-center shadow-md ring-4 ring-blue-500/10 group-hover:scale-105 transition-all overflow-hidden bg-white p-1">
+            <img 
+              src="https://lh3.googleusercontent.com/d/1hqq7ZuYIxJoHfSsY4J-FVHkG_wY283mI" 
+              alt="FIUNVA" 
+              className="max-w-[85%] max-h-[85%] object-contain" 
+              referrerPolicy="no-referrer"
+            />
           </div>
           <div>
-            <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-950 dark:text-slate-100 flex items-center gap-1.5 leading-none">
+            <h1 className="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white uppercase leading-none italic">
               FIUNVA
-              <span className={`text-[9px] font-bold tracking-wider font-sans uppercase px-2 py-0.5 rounded-md transition-colors ${activeRole === "admin" ? "bg-amber-500 text-white" : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400"}`}>
-                {activeRole === "admin" ? "CONSOLA ADMINISTRADOR" : "SISTEMA EXPERTO"}
-              </span>
             </h1>
+            <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-widest text-slate-400 dark:text-slate-500 mt-1 sm:mt-1.5 italic">
+              SISTEMA EXPERTO
+            </p>
           </div>
         </div>
 
         {/* Header Right elements */}
-        <div className="flex items-center gap-4 select-none">
+        <div className="flex items-center gap-2 sm:gap-4 select-none">
+          
           {/* Simulated current credential card */}
-          <div className="flex items-center gap-2.5 px-3 py-1.5 sm:px-3.5 sm:py-2 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-600 dark:text-slate-400 text-xs">
-            <Cpu className="w-4 h-4 text-blue-500" />
-            <span className="font-semibold flex items-center gap-1">
-              <span>Rol:</span>
-              {activeRole === "admin" ? (
-                <strong className="text-slate-900 dark:text-slate-200 font-bold">Consultor Administrador</strong>
+          {activeRole === "client" && (
+            <div className="relative inline-block select-none text-[11px] sm:text-xs">
+              {clientType === "registrado" ? (
+                <div className="flex items-center gap-1 sm:gap-2 px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-bold">
+                  <span className="truncate max-w-[80px] sm:max-w-[150px]">Rol: <strong>{registeredName}</strong></span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setClientType("nuevo");
+                      setRegisteredName("");
+                      setClientCode("");
+                    }}
+                    className="text-[10px] text-red-500 hover:text-red-700 font-bold ml-1 hover:underline cursor-pointer shrink-0"
+                    title="Salir del modo registrado"
+                  >
+                    (Salir)
+                  </button>
+                </div>
               ) : (
-                <span className="inline-flex items-center gap-1 text-slate-900 dark:text-slate-200">
-                  {clientType === "registrado" ? (
-                    <span className="flex items-center gap-1.5">
-                      <strong className="text-slate-900 dark:text-slate-200 font-extrabold bg-blue-500/10 px-1.5 py-0.5 rounded text-[11px] border border-blue-500/20">
-                        Cliente: {registeredName}
-                      </strong>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setClientType("nuevo");
-                          setRegisteredName("");
-                          setClientCode("");
-                        }}
-                        className="text-[10px] text-red-500 hover:text-red-700 dark:hover:text-red-400 font-bold ml-1 hover:underline cursor-pointer"
-                        title="Salir del modo cliente registrado"
-                      >
-                        Salir
-                      </button>
-                    </span>
-                  ) : (
-                    <select
-                      value={clientType}
-                      onChange={(e) => setClientType(e.target.value as "nuevo" | "integrado")}
-                      className="bg-transparent border-none font-bold text-slate-950 dark:text-slate-100 focus:ring-0 focus:outline-none cursor-pointer pr-1 py-0 text-xs"
-                    >
-                      <option className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200" value="nuevo">Cliente nuevo</option>
-                      <option className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200" value="integrado">Cliente integrado</option>
-                    </select>
-                  )}
-                </span>
+                <div className="flex items-center gap-1 bg-slate-100/80 dark:bg-slate-900/80 px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-full border border-slate-200/60 dark:border-slate-800 transition shadow-xs text-slate-650 dark:text-slate-300 font-bold">
+                  <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 font-extrabold uppercase shrink-0">Rol:</span>
+                  <select
+                    value={clientType}
+                    onChange={(e) => setClientType(e.target.value as "nuevo" | "integrado")}
+                    className="bg-transparent border-none font-bold text-slate-905 dark:text-slate-100 focus:ring-0 focus:outline-none cursor-pointer p-0 text-[11px] sm:text-xs pr-1"
+                  >
+                    <option className="bg-white dark:bg-[#070c19] text-slate-800 dark:text-slate-200" value="nuevo">Cliente nuevo</option>
+                    <option className="bg-white dark:bg-[#070c19] text-slate-800 dark:text-slate-200" value="integrado">Cliente integrado</option>
+                  </select>
+                </div>
               )}
-            </span>
-          </div>
+            </div>
+          )}
 
-          {/* Theme Toggle Button */}
+          {activeRole === "admin" && (
+            <div className="flex items-center gap-1 sm:gap-1.5 bg-amber-500/10 px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-full border border-amber-500/20 text-[10px] sm:text-xs text-amber-700 dark:text-amber-400 font-extrabold shadow-xs">
+              <Cpu className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate max-w-[100px] sm:max-w-none">ZONA TÉCNICA</span>
+            </div>
+          )}
+
+          {/* Theme Toggle Button - Rounded-full Circle */}
           <button
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition cursor-pointer"
-            aria-label="Toggle visual theme selection"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border border-slate-250 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-all flex items-center justify-center cursor-pointer shadow-xs shrink-0"
+            aria-label="Alternar modo visual"
           >
-            {theme === "dark" ? <Sun className="w-4.5 h-4.5 text-amber-500" /> : <Moon className="w-4.5 h-4.5 text-blue-600" />}
+            {theme === "dark" ? <Sun className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-500" /> : <Moon className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-blue-600" />}
           </button>
         </div>
       </header>
@@ -549,127 +758,170 @@ export default function App() {
 
         {/* 1. VIEW CURRENT CLIENT INTERFACE (Chatbot entrance) */}
         {activeRole === "client" && (
-          <div className="max-w-4xl mx-auto w-full flex flex-col sm:rounded-2xl bg-white dark:bg-slate-900 border-y sm:border border-slate-200 dark:border-slate-800 shadow-sm h-[calc(100vh-140px)] sm:h-[620px] min-h-[460px] overflow-hidden transition-all duration-300">
+          <div className="max-w-4xl mx-auto w-full flex flex-col sm:rounded-3xl bg-white dark:bg-[#070c19]/35 border border-slate-200/80 dark:border-slate-800/80 shadow-md transition-all duration-300 backdrop-blur-xs">
             
-            {/* Chat Title panel */}
-            <div className="p-3.5 sm:p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="font-bold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 select-none">
-                    Buzón del Chat de Consultas
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-blue-500/15 border border-blue-500/20 text-[10px] font-bold text-blue-600 dark:text-blue-400 font-mono">
-                  MONEDA: {currentCurrency}
-                </div>
+            {/* Real-time Subheader status line matching the mockup */}
+            <div className="px-4 py-3 sm:px-6 border-b border-slate-100 dark:border-slate-800/70 bg-white/50 dark:bg-[#080d19]/40 flex items-center justify-between sm:rounded-t-3xl">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+                <span className="text-xs sm:text-[13px] font-bold text-slate-600 dark:text-slate-400">
+                  Sistema Experto Activo
+                </span>
               </div>
-              <div className="text-[10px] text-slate-400 dark:text-slate-400 font-mono font-semibold select-none">
-                {clientType === "registrado" ? (
-                  <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                    Cliente Registrado: {registeredName} (Código: {clientCode} • 15% Desc. VIP)
-                  </span>
-                ) : clientType === "integrado" ? (
-                  <span className="text-blue-600 dark:text-blue-400 font-extrabold bg-blue-500/5 px-2 py-1 rounded-md border border-blue-500/10">
-                    Cliente Integrado (5% Desc. Frecuente)
-                  </span>
-                ) : (
-                  <span className="text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-850 px-2 py-1 rounded-md border border-slate-200/50 dark:border-slate-800">
-                    Cliente Nuevo (Estándar)
-                  </span>
-                )}
+              <div className="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg bg-blue-50 dark:bg-blue-955/20 border border-blue-100 dark:border-blue-900/40 text-[9px] sm:text-[10px] font-black text-blue-600 dark:text-blue-400 tracking-wider font-mono uppercase">
+                MONEDA {currentCurrency}
               </div>
             </div>
 
-            {/* Chat scroll workspace */}
-            <div className="flex-1 overflow-y-auto p-3 sm:p-4 flex flex-col gap-3.5 sm:gap-4 bg-slate-50/20 dark:bg-slate-950/20">
-              {chatHistory.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex flex-col max-w-[85%] ${
-                    msg.sender === "client" ? "self-end items-end" : "self-start items-start"
-                  }`}
-                >
-                  {/* Speech Bubble */}
-                  <div
-                    className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl text-xs sm:text-sm leading-relaxed ${
-                      msg.sender === "client"
-                        ? "bg-blue-600 text-white rounded-br-none shadow-sm font-sans"
-                        : "bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-bl-none border border-slate-200/50 dark:border-slate-700"
-                    }`}
-                  >
-                    <div className="whitespace-pre-line leading-relaxed font-sans">{msg.text}</div>
-                  </div>
-
-                  {/* Metadata line info */}
-                  <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 pl-1 font-medium select-none">
-                    {msg.sender === "client" ? "Tú (Cliente)" : "FIUNVA AI Core"} • {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </div>
-
-                  {/* Tag highlights parsed from backend agent */}
-                  {msg.extractedInfo && msg.extractedInfo.items.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5 self-start">
-                      {msg.extractedInfo.items.map((it, idx) => (
-                        <span
-                          key={idx}
-                          className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-slate-200 dark:bg-slate-800 border border-slate-300/30 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-mono"
-                        >
-                          Mapeado: {it.quantity}x {it.product}
-                        </span>
-                      ))}
+            {/* Chat scroll workspace - integrated naturally into the page scroll */}
+            <div className="p-3 sm:p-5 flex flex-col gap-3.5 sm:gap-4 bg-slate-50/10 dark:bg-slate-950/10">
+              {chatHistory.map((msg) => {
+                const isClient = msg.sender === "client";
+                if (isClient) {
+                  return (
+                    <div key={msg.id} className="flex flex-col max-w-[90%] sm:max-w-[85%] self-end items-end gap-1 my-0.5">
+                      <div className="p-3 sm:p-4 rounded-xl rounded-tr-none bg-blue-600 text-white text-xs sm:text-sm leading-relaxed shadow-sm font-sans font-semibold">
+                        {msg.text}
+                      </div>
+                      <div className="text-[9px] text-slate-400 dark:text-slate-500 font-mono select-none mr-2 font-bold uppercase tracking-wide">
+                        Tú • {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
                     </div>
-                  )}
-                </div>
-              ))}
+                  );
+                } else {
+                  return (
+                    <div
+                      key={msg.id}
+                      className="flex gap-2.5 sm:gap-4 items-start p-3 sm:p-4 bg-white/85 dark:bg-[#0c1425]/70 border border-slate-200/50 dark:border-slate-800/80 rounded-2xl w-full my-0.5 shadow-xs transition-all animate-fade-in"
+                    >
+                      {/* Avatar container */}
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm ring-4 ring-blue-500/10 overflow-hidden p-1">
+                        <img 
+                          src="https://lh3.googleusercontent.com/d/1hqq7ZuYIxJoHfSsY4J-FVHkG_wY283mI" 
+                          alt="FIUNVA Agente" 
+                          className="max-w-[85%] max-h-[85%] object-contain" 
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      {/* Text body and info */}
+                      <div className="flex-1 flex flex-col gap-2">
+                        <div className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line font-medium font-sans">
+                          {msg.text}
+                        </div>
+                        
+                        {/* Timestamp */}
+                        <div className="text-[9px] text-slate-450 dark:text-slate-500 font-bold font-mono">
+                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+              })}
 
               {isGenerating && (
-                <div className="flex items-center gap-2 self-start p-3 bg-slate-100 dark:bg-slate-800/45 rounded-2xl border border-slate-200/20 dark:border-slate-700 rounded-bl-none text-xs text-slate-500 dark:text-slate-400">
-                  <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                  <span>Los agentes están deliberando en paralelo...</span>
+                <div className="flex items-center gap-2.5 self-start p-3 sm:p-4 bg-slate-100/60 dark:bg-[#0c1425]/40 rounded-2xl border border-slate-200/40 dark:border-slate-850 rounded-bl-none text-xs text-slate-500 dark:text-slate-400 font-semibold shadow-2xs">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500 shrink-0" />
+                  <span className="text-[11px] sm:text-xs">Los agentes están deliberando en paralelo...</span>
                 </div>
               )}
               <div ref={chatEndRef} />
             </div>
 
-            {/* Suggestions Panel matching the user's specific text choices! */}
-            <div className="p-2.5 sm:p-3 bg-slate-50/80 dark:bg-slate-900/60 border-t border-slate-150 dark:border-slate-800">
-              <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 dark:text-slate-550 mb-1.5 pl-1 select-none">
-                Preguntas rápidas disponibles de un clic:
-              </div>
-              <div className="flex gap-2 overflow-x-auto pb-1 select-none whitespace-nowrap">
-                {quickQuestions.map((p, i) => (
-                  <button
-                    key={i}
-                    disabled={isGenerating}
-                    onClick={() => handleSendChat(p.text)}
-                    className="px-3 py-1.5 sm:px-3.5 sm:py-2 text-[11px] font-bold shrink-0 cursor-pointer text-blue-700 dark:text-blue-400 hover:text-white dark:hover:text-amber-50 hover:bg-blue-600 dark:hover:bg-blue-900 bg-blue-500/10 dark:bg-blue-950/20 border border-blue-500/10 dark:border-blue-900/50 rounded-xl transition-all"
-                  >
-                    {p.title}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Chat Input panel */}
-            <div className="p-2.5 sm:p-3 bg-white dark:bg-slate-900 border-t border-slate-150 dark:border-slate-800">
-              <div className="flex gap-2">
-                <input
-                  type="text"
+            <div className="p-3 sm:p-5 bg-white dark:bg-[#070c19] border-t border-slate-100 dark:border-slate-800/80">
+              <div className="relative flex flex-col rounded-2xl border border-slate-200 dark:border-slate-800 bg-[#f8fafc]/40 dark:bg-[#030712]/40 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/40 transition-all p-3 sm:p-4 min-h-[90px] sm:min-h-[105px]">
+                <textarea
                   disabled={isGenerating}
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSendChat()}
-                  placeholder="Escribe tu consulta o pide cotizar..."
-                  className="flex-1 text-xs sm:text-sm p-3 sm:p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendChat();
+                    }
+                  }}
+                  placeholder="Escribe tu consulta aquí..."
+                  className="w-full flex-grow text-xs sm:text-sm bg-transparent border-none text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 outline-none focus:ring-0 resize-none min-h-[40px] sm:min-h-[50px] font-medium"
                 />
-                <button
-                  onClick={() => handleSendChat()}
-                  disabled={isGenerating || !inputText.trim()}
-                  className="p-3 sm:p-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white shadow-md hover:shadow-lg transition flex items-center justify-center cursor-pointer shrink-0"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-550 select-none font-bold font-sans uppercase">
+                    Sistema Multi-Agente Activo
+                  </span>
+                  <button
+                    onClick={() => handleSendChat()}
+                    disabled={isGenerating || !inputText.trim()}
+                    className="p-2 sm:p-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-45 text-white shadow-md hover:shadow-lg transition-all flex items-center justify-center cursor-pointer shrink-0"
+                    title="Enviar consulta"
+                  >
+                    <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  </button>
+                </div>
               </div>
+            </div>
+
+            {/* Suggestions Panel is now located under the Input Area, replacing the connected agents footer */}
+            <div className="p-4 sm:p-5 bg-[#f8fafc] dark:bg-[#040813] border-t border-slate-200/60 dark:border-slate-800/80 flex flex-col gap-2.5 sm:rounded-b-3xl">
+              {quotePendingQuery ? (
+                <>
+                  <div className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 select-none pl-1 animate-pulse">
+                    ⚠️ SELECCIONA LA DIVISA PARA TU COTIZACIÓN:
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1">
+                    <button
+                      onClick={() => handleSelectCurrency("MXN")}
+                      className="flex items-center justify-center gap-2 px-3 py-3 text-xs sm:text-[13px] font-black transition-all rounded-xl select-none cursor-pointer border text-emerald-700 bg-emerald-500/10 border-emerald-500/20 dark:text-emerald-400 dark:bg-emerald-950/20 dark:border-emerald-500/20 hover:scale-[1.01] hover:bg-emerald-600 hover:text-white dark:hover:bg-emerald-600 shadow-2xs"
+                    >
+                      <span className="text-lg">🇲🇽</span>
+                      <span>Pesos Mexicanos (MXN)</span>
+                    </button>
+                    <button
+                      onClick={() => handleSelectCurrency("USD")}
+                      className="flex items-center justify-center gap-2 px-3 py-3 text-xs sm:text-[13px] font-black transition-all rounded-xl select-none cursor-pointer border text-blue-700 bg-blue-500/10 border-blue-500/20 dark:text-blue-400 dark:bg-blue-955/20 dark:border-blue-500/20 hover:scale-[1.01] hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 shadow-2xs"
+                    >
+                      <span className="text-lg">🇺🇸</span>
+                      <span>Dólares (USD)</span>
+                    </button>
+                    <button
+                      onClick={() => handleSelectCurrency("EUR")}
+                      className="flex items-center justify-center gap-2 px-3 py-3 text-xs sm:text-[13px] font-black transition-all rounded-xl select-none cursor-pointer border text-amber-700 bg-amber-500/10 border-amber-500/20 dark:text-amber-400 dark:bg-amber-955/20 dark:border-amber-500/20 hover:scale-[1.01] hover:bg-amber-600 hover:text-white dark:hover:bg-amber-600 shadow-2xs"
+                    >
+                      <span className="text-lg">🇪🇺</span>
+                      <span>Euros (EUR)</span>
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-[9px] sm:text-[10px] uppercase font-bold tracking-widest text-[#64748b] dark:text-[#94a3b8]/70 select-none pl-1">
+                    PREGUNTAS RÁPIDAS
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {quickQuestions.map((p, i) => {
+                      let IconComponent = Cpu;
+                      if (p.text.includes("Soy cliente registrado")) IconComponent = User;
+                      else if (p.text.includes("ofrecen")) IconComponent = Layers;
+                      else if (p.text.includes("cotizar")) IconComponent = DollarSign;
+                      else if (p.text.includes("estatus")) IconComponent = Search;
+
+                      return (
+                        <button
+                          key={i}
+                          disabled={isGenerating}
+                          onClick={() => handleSendChat(p.text)}
+                          className="flex items-center gap-2.5 px-3 py-2.5 sm:px-4 sm:py-3 text-xs sm:text-[13px] font-bold text-left transition-all rounded-xl select-none cursor-pointer border text-blue-700 hover:text-white bg-slate-50 hover:bg-blue-600 border-slate-200 dark:bg-[#0e162d]/25 dark:text-blue-400 dark:hover:bg-blue-900 dark:border-blue-950/60 hover:scale-[1.01] hover:shadow-2xs disabled:opacity-50"
+                        >
+                          <IconComponent className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-blue-500 dark:text-blue-400 shrink-0" />
+                          <span className="truncate">{p.title.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD00-\uDFFF]/g, '').trim()}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
 
           </div>
@@ -778,11 +1030,7 @@ export default function App() {
       <footer className="mt-20 border-t border-slate-200 dark:border-slate-850 bg-white dark:bg-slate-950 py-8 px-4 sm:px-6 select-none transition-colors duration-300">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="text-xs text-slate-505 dark:text-slate-400 font-medium">
-            © 2026 FIUNVA Consultores Tecnológicos S.A. de C.V. Todos los derechos reservados.
-          </div>
-          <div className="text-[11px] text-slate-400 dark:text-slate-500 font-mono flex items-center gap-1.5">
-            <Terminal className="w-3.5 h-3.5 text-blue-500" />
-            <span>Consola Segura Encriptada en Cloud Run</span>
+            © 2026 FIUNVA. Todos los derechos reservados.
           </div>
         </div>
       </footer>

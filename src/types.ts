@@ -22,6 +22,9 @@ export interface Product {
   stock: number;
   unit: string;
   webReference?: string;
+  webReferences?: string[];
+  originalPrice?: number;
+  originalCurrency?: "USD" | "MXN" | "EUR";
 }
 
 export interface OrderItem {
