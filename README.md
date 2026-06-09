@@ -184,6 +184,40 @@ Firestore es la base de datos NoSQL orientada a documentos dentro de Firebase. S
 - Las órdenes quedan como registros de auditoría y no se eliminan.
 - Los cambios sensibles, como roles o niveles de acceso, quedan restringidos al personal interno.
 
+**Por qué `firebase-applet-config.json` no está en el repositorio:**
+- Ese archivo contiene parámetros de conexión y credenciales de la aplicación Firebase/Google, por lo que se trata como configuración local sensible.
+- Mantenerlo fuera del control de versiones reduce el riesgo de exponer llaves, identificadores internos o datos de despliegue en GitHub.
+- El repositorio incluye la estructura y la guía para generarlo, pero cada persona debe crear su propia configuración al clonar el proyecto y conectar su propio proyecto de Firebase.
+
+**Cómo generar el archivo al clonar este repositorio:**
+1. Crear un proyecto nuevo en Firebase Console.
+2. Registrar una aplicación web dentro del proyecto Firebase.
+3. Copiar el bloque de configuración que entrega Firebase al crear la app.
+4. Crear en la raíz del repositorio un archivo llamado `firebase-applet-config.json`.
+5. Pegar ahí la configuración de tu propio proyecto y completar los campos requeridos por la app.
+6. Mantener ese archivo fuera de Git para evitar publicar credenciales.
+
+**Plantilla de referencia para el archivo local:**
+
+```json
+{
+  "firebase": {
+    "apiKey": "TU_API_KEY",
+    "authDomain": "tu-proyecto.firebaseapp.com",
+    "projectId": "tu-proyecto",
+    "storageBucket": "tu-proyecto.appspot.com",
+    "messagingSenderId": "TU_SENDER_ID",
+    "appId": "TU_APP_ID"
+  }
+}
+```
+
+**Notas importantes para el usuario nuevo:**
+- No reutilices claves de otra persona ni copies el archivo de ejemplo de un proyecto distinto.
+- Si cambias de proyecto Firebase, regenera el archivo con los datos correctos.
+- Si el proyecto usa Firestore Rules o Authentication, revisa también que esas reglas correspondan a tu propio entorno.
+- Si necesitas mantener un ejemplo sin secretos, usa un archivo de muestra como `firebase-applet-config.example.json` o documenta los valores en `.env.example`.
+
 **UI/UX en desarrollo:**
 - La interfaz actual está construida en React con Vite y un sistema visual responsivo pensado para operación local y futura conexión con Firestore/Firebase.
 - El diseño usa modo claro/oscuro, tipografías limpias y un estilo de consola técnica para comunicar que el sistema es una herramienta de ingeniería y no un chatbot genérico.
