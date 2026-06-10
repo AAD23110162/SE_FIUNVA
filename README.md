@@ -218,6 +218,29 @@ Firestore es la base de datos NoSQL orientada a documentos dentro de Firebase. S
 - Si el proyecto usa Firestore Rules o Authentication, revisa también que esas reglas correspondan a tu propio entorno.
 - Si necesitas mantener un ejemplo sin secretos, usa un archivo de muestra como `firebase-applet-config.example.json` o documenta los valores en `.env.example`.
 
+**Dinámica de acceso Cliente/Administrador por correo (App.tsx):**
+
+En la implementación actual, el control de acceso entre interfaz de cliente e interfaz de administrador se hace con autenticación de Google y validación explícita de correo electrónico en el frontend.
+
+- **Herramienta Google utilizada:** Firebase Authentication con `GoogleAuthProvider` y `signInWithPopup` para iniciar sesión.
+- **Persistencia de sesión:** `onAuthStateChanged` sincroniza el estado de sesión y guarda el correo en `localStorage` (`fiunva_session_email`) para conservar continuidad entre recargas.
+- **Regla de acceso administrativo:** solo el correo `a23110162@ceti.mx` puede activar la vista de administrador.
+- **Bloqueo automático de privilegios:** si la sesión no coincide con el correo administrador, el sistema fuerza `activeRole = "client"`.
+- **Conmutación de vista:** el cambio entre cliente/admin desde el header se habilita únicamente cuando la sesión autenticada es el correo administrador.
+
+**Qué puede hacer cada interfaz según la sesión:**
+- **Cliente (por defecto):** usar el chat multiagente, solicitar cotizaciones, registrarse/validarse y consultar su flujo.
+- **Administrador (correo autorizado):** acceder a subtabs de consola (`quotes`, `catalog`, `collections`, `clients`) para operar cotizaciones, catálogo, colecciones y directorio de clientes.
+
+**Relación con base de datos y servicios utilizados:**
+- **Google/Firebase Auth:** decide identidad y rol operativo de la interfaz.
+- **Firestore (cuando está habilitado en backend):** persiste principalmente `products` y `orders`, y sincroniza datos con la app.
+- **Capa REST del backend (`server.ts`):** la interfaz consume endpoints como `/api/products`, `/api/orders`, `/api/chat` y operaciones administrativas (aprobar/rechazar, editar catálogo, reset).
+- **Fallback local:** si no existe configuración Firebase local, el backend opera en memoria temporal para permitir pruebas del flujo.
+
+**Nota técnica importante:**
+- La regla por correo es un control operativo del prototipo (MVP). Para producción se recomienda mover esta autorización a reglas centralizadas por rol en Firebase/Firestore (claims, reglas y validación en backend), evitando depender solo de lógica del frontend.
+
 **UI/UX en desarrollo:**
 - La interfaz actual está construida en React con Vite y un sistema visual responsivo pensado para operación local y futura conexión con Firestore/Firebase.
 - El diseño usa modo claro/oscuro, tipografías limpias y un estilo de consola técnica para comunicar que el sistema es una herramienta de ingeniería y no un chatbot genérico.

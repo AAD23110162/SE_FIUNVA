@@ -27,13 +27,17 @@ import {
   User,
   Layers,
   DollarSign,
-  Search
+  Search,
+  UserPlus
 } from "lucide-react";
 import { Product, Order, UserProfile, Message, AgentStep, UserRole } from "./types";
 import AgentStatusFlow from "./components/AgentStatusFlow";
 import DatabaseVisualizer from "./components/DatabaseVisualizer";
 import CatalogManager from "./components/CatalogManager";
 import OrderQueue from "./components/OrderQueue";
+import ClientList from "./components/ClientList";
+import { auth } from "./lib/firebase";
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
 
 export default function App() {
   // Theme state (Dark Mode or Light Mode matching correct contrast classes)
@@ -43,11 +47,13 @@ export default function App() {
   const [activeRole, setActiveRole] = useState<"client" | "admin">("client");
   
   // Administrator view sub-panels
-  const [adminSubTab, setAdminSubTab] = useState<"quotes" | "catalog" | "collections">("quotes");
+  const [adminSubTab, setAdminSubTab] = useState<"quotes" | "catalog" | "collections" | "clients">("quotes");
 
   // Server state data
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [usersList, setUsersList] = useState<UserProfile[]>([]);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [isResetting, setIsResetting] = useState(false);
   const [isLocalFallback, setIsLocalFallback] = useState(false);
 
@@ -131,16 +137,23 @@ export default function App() {
   const [registeredName, setRegisteredName] = useState<string>("");
   const [clientCode, setClientCode] = useState<string>("");
   const [registrationState, setRegistrationState] = useState<{
-    step: "none" | "waiting_name" | "waiting_code";
+    step: "none" | "waiting_name" | "waiting_code" | "waiting_new_name" | "waiting_new_email" | "waiting_new_phone" | "waiting_new_prefer" | "offering_registration_after_fail";
     tempName?: string;
+    tempEmail?: string;
+    tempPhone?: string;
+    tempCode?: string;
   }>({ step: "none" });
+
+  const [sessionEmail, setSessionEmail] = useState<string>(() => {
+    return auth.currentUser?.email || localStorage.getItem("fiunva_session_email") || "";
+  });
 
   const [quotePendingQuery, setQuotePendingQuery] = useState<string | null>(null);
 
   const activeProfile: UserProfile = activeRole === "admin" ? {
     uid: "usr_admin",
-    name: "Ing. Ana Reyes (Administrador)",
-    email: "admin@fiunva.com",
+    name: "Administrador Principal (CETI)",
+    email: "a23110162@ceti.mx",
     role: "admin",
     clientTier: "standard"
   } : {
@@ -151,10 +164,39 @@ export default function App() {
     clientTier: clientType === "registrado" ? "vip" : (clientType === "integrado" ? "frequent" : "standard")
   };
 
+  // Synchronize dynamic Firebase Session and Auto-onboarding for Administrator 
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        const email = user.email || "";
+        setSessionEmail(email);
+        localStorage.setItem("fiunva_session_email", email);
+        if (email === "a23110162@ceti.mx") {
+          setActiveRole("admin");
+        }
+      } else {
+        setSessionEmail("");
+        localStorage.removeItem("fiunva_session_email");
+        setActiveRole("client");
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Enforce security rule: if sessionEmail is not the principal administrator email:
+  // 1. Kick them out of admin mode immediately if they are in it.
+  // 2. Prevent switching to admin.
+  useEffect(() => {
+    if (sessionEmail !== "a23110162@ceti.mx" && activeRole === "admin") {
+      setActiveRole("client");
+    }
+  }, [sessionEmail, activeRole]);
+
   // Load backend seeds on mount
   useEffect(() => {
     fetchCatalog();
     fetchOrders();
+    fetchUsers();
   }, []);
 
   // Update theme tag dynamically
@@ -198,6 +240,62 @@ export default function App() {
     }
   };
 
+  // Fetch registered users/clients database
+  const fetchUsers = async () => {
+    try {
+      const response = await fetch("/api/users");
+      if (response.ok) {
+        const data = await response.json();
+        setUsersList(data);
+      }
+    } catch (error) {
+      console.error("Error cargando directorio de clientes:", error);
+    }
+  };
+
+  // Save or update user profile (client)
+  const handleSaveUser = async (user: UserProfile) => {
+    const response = await fetch("/api/users/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(user)
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Falla al guardar el usuario.");
+    }
+    const data = await response.json();
+    setUsersList(data.users);
+  };
+
+  // Delete user profile (client) permanently
+  const handleDeleteUser = async (userId: string) => {
+    const response = await fetch(`/api/users/${userId}/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" }
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Falla al eliminar el usuario.");
+    }
+    const data = await response.json();
+    setUsersList(data.users);
+  };
+
+  // Delete order permanently
+  const handleDeleteOrder = async (orderId: string) => {
+    const response = await fetch(`/api/orders/${orderId}/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" }
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Falla al remover el pedido.");
+    }
+    const data = await response.json();
+    setOrders(data.orders);
+  };
+
   // Approve workflows
   const handleApproveOrder = async (orderId: string) => {
     const response = await fetch(`/api/orders/${orderId}/approve`, {
@@ -234,6 +332,9 @@ export default function App() {
         const data = await response.json();
         setProducts(data.products);
         setOrders(data.orders);
+        if (data.users) {
+          setUsersList(data.users);
+        }
       }
     } catch (error) {
       console.error("Error cargando reset database:", error);
@@ -405,7 +506,7 @@ export default function App() {
         const botMsg: Message = {
           id: `msg-reg-code-${Date.now()}`,
           sender: "agent",
-          text: `Mucho gusto, **${query}**. Por favor, escribe tu Código de Cliente para corroborar tu registro (ej: VIP-777, INT-101, FIU-999 o cualquier código de referencia):`,
+          text: `Mucho gusto, **${query}**. Por favor, escribe tu Código de Cliente de 6 caracteres para corroborar tu registro (ej: VIP-777, CAR-123 o tu clave única asignada):`,
           timestamp: new Date().toISOString()
         };
         setChatHistory((prev) => [...prev, botMsg]);
@@ -418,11 +519,118 @@ export default function App() {
       setIsGenerating(true);
       setTimeout(() => {
         const finalName = registrationState.tempName || "Cliente Registrado";
-        if (query.trim().length < 3) {
-          const errBotMsg: Message = {
-            id: `msg-reg-err-${Date.now()}`,
+        
+        // Exact matching inside database (usersList active clients)
+        const matched = usersList.find(
+          (u) =>
+            u.role === "client" &&
+            u.uid.toLowerCase().trim() === query.trim().toLowerCase()
+        );
+
+        // Does the name also match roughly or exactly (case-insensitive substring overlap)
+        const nameMatches =
+          matched &&
+          (matched.name.toLowerCase().trim().includes(finalName.toLowerCase().trim()) ||
+            finalName.toLowerCase().trim().includes(matched.name.toLowerCase().trim()));
+
+        if (matched && nameMatches) {
+          setClientType("registrado");
+          setRegisteredName(matched.name);
+          setClientCode(matched.uid);
+          setRegistrationState({ step: "none" });
+
+          const okBotMsg: Message = {
+            id: `msg-reg-ok-${Date.now()}`,
             sender: "agent",
-            text: `⚠️ El código "${query}" no tiene un formato válido o no está registrado. Debe tener al menos 3 caracteres (ej: VIP-777, CAR-123). Inténtalo de nuevo ingresando tu código de cliente:`,
+            text: `¡Validación de Cliente Exitosa! 🎉\n\nBienvenido de vuelta, **${matched.name}**. Tu perfil ha sido sincronizado bajo el código **${matched.uid}**.\n\nHemos actualizado tu rol a **Cliente: ${matched.name}**, reconociendo todos tus privilegios de nivel **${matched.clientTier.toUpperCase()}** (descuento automático aplicado en todos tus componentes, robótica y cotizaciones de desarrollo técnico).`,
+            timestamp: new Date().toISOString()
+          };
+          setChatHistory((prev) => [...prev, okBotMsg]);
+          setIsGenerating(false);
+        } else {
+          // If name/code does not match or user is not found, offer options to register as a new client
+          setRegistrationState({
+            step: "offering_registration_after_fail",
+            tempName: finalName,
+            tempCode: query
+          });
+
+          const failBotMsg: Message = {
+            id: `msg-reg-fail-${Date.now()}`,
+            sender: "agent",
+            text: `⚠️ No logramos verificar un cliente registrado que coincida con el nombre **"${finalName}"** y código de acceso **"${query}"** en nuestro sistema.\n\n¿Deseas registrarte como un **Cliente Nuevo** ahora mismo?\n\n* Escribe **1** o **Registrarme** para registrarte como Cliente Nuevo.\n* Escribe **2** o **Reintentar** para volver a intentar tu validación de cliente registrado.`,
+            timestamp: new Date().toISOString()
+          };
+          setChatHistory((prev) => [...prev, failBotMsg]);
+          setIsGenerating(false);
+        }
+      }, 900);
+      return;
+    }
+
+    if (registrationState.step === "offering_registration_after_fail") {
+      setIsGenerating(true);
+      setTimeout(() => {
+        const cleaned = query.trim().toLowerCase();
+        if (cleaned === "1" || cleaned.includes("registrar") || cleaned.includes("nuevo") || cleaned.includes("si") || cleaned.includes("sí")) {
+          setRegistrationState({ step: "waiting_new_name" });
+          const botMsg: Message = {
+            id: `msg-new-reg-start-${Date.now()}`,
+            sender: "agent",
+            text: "¡Excelente decisión! Vamos a crear tu registro de nuevo cliente en la base de datos. Por favor escribe tu **Nombre Completo**:",
+            timestamp: new Date().toISOString()
+          };
+          setChatHistory((prev) => [...prev, botMsg]);
+        } else if (cleaned === "2" || cleaned.includes("reintentar") || cleaned.includes("no") || cleaned.includes("volver")) {
+          setRegistrationState({ step: "waiting_name" });
+          const botMsg: Message = {
+            id: `msg-reg-start-${Date.now()}`,
+            sender: "agent",
+            text: "De acuerdo, volvamos a intentar tu validación. Por favor escribe tu **Nombre Completo** tal como aparece en tu registro:",
+            timestamp: new Date().toISOString()
+          };
+          setChatHistory((prev) => [...prev, botMsg]);
+        } else {
+          const repromptMsg: Message = {
+            id: `msg-reprompt-fail-${Date.now()}`,
+            sender: "agent",
+            text: "⚠️ Opción no reconocida. Escribe **1** o **Registrarme** para iniciar tu registro de cliente nuevo, o **2** o **Reintentar** para volver a validar tus credenciales de cliente registrado.",
+            timestamp: new Date().toISOString()
+          };
+          setChatHistory((prev) => [...prev, repromptMsg]);
+        }
+        setIsGenerating(false);
+      }, 700);
+      return;
+    }
+
+    // New Client Onboarding Flow steps
+    if (registrationState.step === "waiting_new_name") {
+      setIsGenerating(true);
+      setTimeout(() => {
+        setRegistrationState({ step: "waiting_new_email", tempName: query });
+        const botMsg: Message = {
+          id: `msg-new-reg-email-${Date.now()}`,
+          sender: "agent",
+          text: `Mucho gusto, **${query}**. Ahora escribe tu **Correo Electrónico** para asociarlo a tu cuenta de cliente:`,
+          timestamp: new Date().toISOString()
+        };
+        setChatHistory((prev) => [...prev, botMsg]);
+        setIsGenerating(false);
+      }, 700);
+      return;
+    }
+
+    if (registrationState.step === "waiting_new_email") {
+      setIsGenerating(true);
+      setTimeout(() => {
+        const email = query.trim();
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          const errBotMsg: Message = {
+            id: `msg-new-reg-err-${Date.now()}`,
+            sender: "agent",
+            text: `⚠️ El correo electrónico **"${email}"** no parece tener un formato válido. Por favor, escribe un correo electrónico correcto (ejemplo: correo@ejemplo.com):`,
             timestamp: new Date().toISOString()
           };
           setChatHistory((prev) => [...prev, errBotMsg]);
@@ -430,20 +638,132 @@ export default function App() {
           return;
         }
 
-        setClientType("registrado");
-        setRegisteredName(finalName);
-        setClientCode(query);
-        setRegistrationState({ step: "none" });
+        setRegistrationState({
+          step: "waiting_new_phone",
+          tempName: registrationState.tempName,
+          tempEmail: email
+        });
 
-        const okBotMsg: Message = {
-          id: `msg-reg-ok-${Date.now()}`,
+        const botMsg: Message = {
+          id: `msg-new-reg-phone-${Date.now()}`,
           sender: "agent",
-          text: `¡Validación de Cliente Exitosa! 🎉\n\nBienvenido, **${finalName}**. Tu perfil ha sido sincronizado bajo el código **${query}**.\n\nHemos actualizado tu rol a **Cliente: ${finalName}**, otorgándote un **15% de descuento VIP automático** en todos tus componentes, sensores, robótica y servicios de desarrollo inteligente.`,
+          text: `Excelente. Ahora, escribe tu **Número de Celular de Contacto**:`,
           timestamp: new Date().toISOString()
         };
-        setChatHistory((prev) => [...prev, okBotMsg]);
+        setChatHistory((prev) => [...prev, botMsg]);
         setIsGenerating(false);
-      }, 900);
+      }, 700);
+      return;
+    }
+
+    if (registrationState.step === "waiting_new_phone") {
+      setIsGenerating(true);
+      setTimeout(() => {
+        const phone = query.trim();
+        if (phone.length < 5) {
+          const errBotMsg: Message = {
+            id: `msg-new-reg-err-phone-${Date.now()}`,
+            sender: "agent",
+            text: `⚠️ El número de celular escrito parece no ser válido. Por favor ingresa tu número de contacto de manera correcta (ej: 3312345678):`,
+            timestamp: new Date().toISOString()
+          };
+          setChatHistory((prev) => [...prev, errBotMsg]);
+          setIsGenerating(false);
+          return;
+        }
+
+        setRegistrationState({
+          step: "waiting_new_prefer",
+          tempName: registrationState.tempName,
+          tempEmail: registrationState.tempEmail,
+          tempPhone: phone
+        });
+
+        const botMsg: Message = {
+          id: `msg-new-reg-prefer-${Date.now()}`,
+          sender: "agent",
+          text: `Entendido. **${phone}** guardado.\n\nFinalmente, ¿por qué medio prefieres que nos contactemos contigo cuando tus pedidos o cotizaciones estén listos?\n\n1. 📱 **Celular**\n2. ✉️ **Correo**\n\n*(Escribe **1** para Celular o **2** para Correo)*:`,
+          timestamp: new Date().toISOString()
+        };
+        setChatHistory((prev) => [...prev, botMsg]);
+        setIsGenerating(false);
+      }, 700);
+      return;
+    }
+
+    if (registrationState.step === "waiting_new_prefer") {
+      setIsGenerating(true);
+      (async () => {
+        try {
+          const cleaned = query.trim().toLowerCase();
+          let pref: "celular" | "correo" = "correo";
+          if (cleaned === "1" || cleaned.includes("celular") || cleaned.includes("tel") || cleaned.includes("mov")) {
+            pref = "celular";
+          } else {
+            pref = "correo";
+          }
+
+          // Generate unique 6-character alphanumeric code containing upper/lowercase letters and digits
+          const generateNewClientCode = () => {
+            const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+            let newCode = "";
+            let isUnique = false;
+            let limit = 0;
+            while (!isUnique && limit < 100) {
+              newCode = "";
+              for (let i = 0; i < 6; i++) {
+                newCode += chars.charAt(Math.floor(Math.random() * chars.length));
+              }
+              isUnique = !usersList.some((u) => u.uid.toLowerCase() === newCode.toLowerCase());
+              limit++;
+            }
+            return newCode;
+          };
+
+          const newCode = generateNewClientCode();
+          const finalName = registrationState.tempName || "Cliente Nuevo";
+          const finalEmail = registrationState.tempEmail || "correo@nuevo.com";
+          const finalPhone = registrationState.tempPhone || "";
+
+          const newUserPayload: UserProfile = {
+            uid: newCode,
+            name: finalName,
+            email: finalEmail,
+            role: "client",
+            clientTier: "standard", // All register as standard tier by default
+            phone: finalPhone,
+            preferredContact: pref
+          };
+
+          // Save to Firestore and memory database
+          await handleSaveUser(newUserPayload);
+
+          // Update local session to use this active registered client
+          setClientType("registrado");
+          setRegisteredName(finalName);
+          setClientCode(newCode);
+          setRegistrationState({ step: "none" });
+
+          const botMsg: Message = {
+            id: `msg-new-reg-ok-${Date.now()}`,
+            sender: "agent",
+            text: `¡Registro de Cliente Exitoso! 🎉\n\nBienvenido a **FIUNVA**, **${finalName}**.\n\nHemos completado tu registro bajo el código de acceso exclusivo de 6 caracteres:\n\n👉 **${newCode}**\n\n* **Nivel de Cliente**: ESTÁNDAR (asignado automáticamente)\n* **Correo Asociado**: ${finalEmail}\n* **Celular de Contacto**: ${finalPhone}\n* **Medio de Contacto Preferido**: ${pref === "celular" ? "📱 Celular" : "✉️ Correo electrónico"}\n\n*(Guarda bien este código de 6 caracteres, es tu clave única para volver a acceder como cliente registrado en el futuro).*`,
+            timestamp: new Date().toISOString()
+          };
+          setChatHistory((prev) => [...prev, botMsg]);
+        } catch (err: any) {
+          console.error("Error creating guest user:", err);
+          const errBotMsg: Message = {
+            id: `msg-new-reg-err-${Date.now()}`,
+            sender: "agent",
+            text: `⚠️ Ocurrió una interrupción al persistir tu registro en la nube: ${err.message || "Error de red"}. Intenta seleccionar tu preferencia de contacto nuevamente para registrarte:`,
+            timestamp: new Date().toISOString()
+          };
+          setChatHistory((prev) => [...prev, errBotMsg]);
+        } finally {
+          setIsGenerating(false);
+        }
+      })();
       return;
     }
 
@@ -456,6 +776,22 @@ export default function App() {
           id: `msg-reg-start-${Date.now()}`,
           sender: "agent",
           text: "¡Perfecto, procedamos con tu validación! Por favor escribe tu **Nombre Completo** tal como aparece en tu registro:",
+          timestamp: new Date().toISOString()
+        };
+        setChatHistory((prev) => [...prev, botMsg]);
+        setIsGenerating(false);
+      }, 600);
+      return;
+    }
+
+    if (query.trim().toLowerCase() === "soy cliente nuevo" || query === "Soy cliente nuevo") {
+      setIsGenerating(true);
+      setTimeout(() => {
+        setRegistrationState({ step: "waiting_new_name" });
+        const botMsg: Message = {
+          id: `msg-new-reg-start-${Date.now()}`,
+          sender: "agent",
+          text: "¡Excelente! Vamos a crear tu registro de nuevo cliente en la base de datos. Por favor escribe tu **Nombre Completo**:",
           timestamp: new Date().toISOString()
         };
         setChatHistory((prev) => [...prev, botMsg]);
@@ -647,6 +983,10 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
       text: "Soy cliente registrado"
     },
     {
+      title: "✨ Soy cliente nuevo",
+      text: "Soy cliente nuevo"
+    },
+    {
       title: "🔌 ¿Qué servicios ofrecen?",
       text: "¿Qué servicios de electrónica, robótica inteligente, manufactura rápida PCB Express y asesoría técnica de software ofrecen?"
     },
@@ -669,10 +1009,15 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
         {/* Branding block matching the image */}
         <div 
           onClick={() => {
-            setActiveRole(activeRole === "client" ? "admin" : "client");
+            if (sessionEmail === "a23110162@ceti.mx") {
+              setActiveRole(activeRole === "client" ? "admin" : "client");
+            } else {
+              // Simply do not switch, staying in client view as requested
+              console.warn("Acceso denegado: Se requiere el correo principal de administración.");
+            }
           }}
-          className="flex items-center gap-2 sm:gap-3 cursor-pointer select-none group transition-all"
-          title="Haga clic para alternar con el modo Administrador/Técnico"
+          className={`flex items-center gap-2 sm:gap-3 select-none group transition-all ${sessionEmail === "a23110162@ceti.mx" ? "cursor-pointer" : "cursor-default"}`}
+          title={sessionEmail === "a23110162@ceti.mx" ? "Haga clic para alternar con el modo Administrador/Técnico" : "Modo de alternancia deshabilitado: No es el correo técnico del creador."}
         >
           <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#070c19] flex items-center justify-center shadow-md ring-4 ring-blue-500/10 group-hover:scale-105 transition-all overflow-hidden bg-white p-1">
             <img 
@@ -735,6 +1080,43 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
               <Cpu className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate max-w-[100px] sm:max-w-none">ZONA TÉCNICA</span>
             </div>
+          )}
+
+          {/* Active Google Authentication session control */}
+          {sessionEmail ? (
+            <div className="flex items-center gap-2 bg-slate-150/90 dark:bg-slate-900/90 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border border-slate-200/60 dark:border-slate-800 transition shadow-xs text-xs font-bold text-slate-700 dark:text-slate-300">
+              <User className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+              <span className="truncate max-w-[120px] sm:max-w-[180px] text-slate-800 dark:text-slate-100" title={sessionEmail}>
+                {sessionEmail}
+              </span>
+              <button
+                onClick={async () => {
+                  try {
+                    await signOut(auth);
+                  } catch (err) {
+                    console.error("Error al cerrar sesión:", err);
+                  }
+                }}
+                className="text-[10px] text-red-500 hover:text-red-700 hover:underline cursor-pointer transition font-bold shrink-0 ml-1.5 border-l border-slate-300 dark:border-slate-700 pl-1.5"
+              >
+                Salir
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={async () => {
+                try {
+                  const provider = new GoogleAuthProvider();
+                  await signInWithPopup(auth, provider);
+                } catch (err: any) {
+                  console.error("Error al iniciar sesión con Google:", err);
+                }
+              }}
+              className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold select-none text-[11px] sm:text-xs px-3.5 py-2 sm:px-4 sm:py-2 rounded-xl shadow-md transform active:scale-95 transition cursor-pointer"
+            >
+              <UserPlus className="w-3.5 h-3.5 shrink-0" />
+              <span>Ingresar con Google</span>
+            </button>
           )}
 
           {/* Theme Toggle Button - Rounded-full Circle */}
@@ -903,6 +1285,7 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
                     {quickQuestions.map((p, i) => {
                       let IconComponent = Cpu;
                       if (p.text.includes("Soy cliente registrado")) IconComponent = User;
+                      else if (p.text.includes("Soy cliente nuevo")) IconComponent = UserPlus;
                       else if (p.text.includes("ofrecen")) IconComponent = Layers;
                       else if (p.text.includes("cotizar")) IconComponent = DollarSign;
                       else if (p.text.includes("estatus")) IconComponent = Search;
@@ -958,6 +1341,7 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
                 {([
                   { id: "quotes", label: "📥 Bandeja de Cotizaciones" },
                   { id: "catalog", label: "⚙️ Directorio & Tarifas" },
+                  { id: "clients", label: "👥 Clientes Registrados" },
                   { id: "collections", label: "🖥️ Servidor Colecciones FI" }
                 ] as const).map((sub) => (
                   <button
@@ -990,9 +1374,12 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
                 products={products}
                 onApproveOrder={handleApproveOrder}
                 onRejectOrder={handleRejectOrder}
+                onDeleteOrder={handleDeleteOrder}
                 currentCurrency={currentCurrency}
                 exchangeRates={exchangeRates}
                 formatBasePrice={formatBasePrice}
+                externalSelectedOrderId={selectedOrderId}
+                onExternalSelectedOrderIdChange={setSelectedOrderId}
               />
             )}
 
@@ -1008,14 +1395,26 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
               />
             )}
 
+            {adminSubTab === "clients" && (
+              <ClientList
+                users={usersList}
+                orders={orders}
+                currentCurrency={currentCurrency}
+                formatBasePrice={formatBasePrice}
+                onSaveUser={handleSaveUser}
+                onDeleteUser={handleDeleteUser}
+                onSelectOrderExternal={(orderId) => {
+                  setSelectedOrderId(orderId);
+                  setAdminSubTab("quotes");
+                }}
+              />
+            )}
+
             {adminSubTab === "collections" && (
               <DatabaseVisualizer
                 products={products}
                 orders={orders}
-                users={[
-                  activeProfile,
-                  { uid: "usr_admin", name: "Ing. Ana Reyes (Administrador)", email: "admin@fiunva.com", role: "admin", clientTier: "standard" }
-                ]}
+                users={usersList}
                 onResetDatabase={handleResetDatabase}
                 isResetting={isResetting}
               />
