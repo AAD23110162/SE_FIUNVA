@@ -398,6 +398,74 @@ Customer      Inference      Proposal      Supervisor
 
 
 
+**Estructura fundamental del Sistema Experto SE-FIUNVA**
+
+El Sistema Experto FIUNVA está construido sobre cuatro pilares arquitectónicos que trabajan en conjunto para procesar solicitudes técnicas y generar recomendaciones de ingeniería de forma automatizada. A continuación se describe cada componente y su rol en el flujo de inferencia.
+
+**1. La Base de Hechos (Fact Base)**
+
+La **Base de Hechos** constituye la información dinámica y variable del sistema en un momento determinado. Es el "estado actual del mundo" que el sistema procesa. En FIUNVA, está integrada por:
+
+- **El Mensaje del Cliente:** El requerimiento, idea o texto en lenguaje natural provisto por el usuario (por ejemplo: "Quiero armar un robot seguidor de líneas con dos motores paso a paso...").
+- **El Estado del Inventario Local:** El nivel actual de stock de los productos almacenados en Firestore al momento de hacer la consulta.
+- **La Divisa de Cotización Activa:** Si el usuario está operando en pesos mexicanos (**MXN**), dólares (**USD**) o euros (**EUR**).
+- **Los Tipos de Cambio del Día:** La tasa de cambio en tiempo real registrada en el sistema (consultada vía Er-API o tasas de respaldo locales).
+- **El Historial de Pedidos y Perfil de Usuario:** Si el cliente está autenticado, su rol (cliente, operador o administrador) y las cotizaciones previas.
+
+---
+
+**2. Base de Conocimiento (Knowledge Base)**
+
+Es el repositorio que almacena el conocimiento estructurado del dominio de la robótica, electrónica y software. Se divide en dos vertientes:
+
+**Datos del Experto (El Catálogo Técnico):**
+- La lista de componentes disponibles junto con sus metadatos (ID del producto, descripción técnica, stock de seguridad mínimo, precio de referencia, y enlaces a distribuidores globales como Mouser, Pololu o DigiKey).
+- Cada producto contiene propiedades técnicas que facilitan la inferencia: categoría (electrónica, robótica, servicios), unidad de medida (pieza, hora, servicio) y referencias web verificadas.
+
+**Reglas del Experto (Las Heurísticas de Negocio e Ingeniería):**
+- **Reglas de Ingeniería / Compatibilidad:** "Si el usuario cotiza un motor paso a paso de tipo `motor_nema17` pero no incluye su controlador `driver_drv8825`, el sistema infiere un riesgo operativo y exige proactivamente agregar el driver."
+- **Reglas de Integración de Servicios:** "Si se detectan elementos complejos como microcontroladores (`arduino_uno` o `esp32_nodemcu`), se proponen servicios profesionales de ingeniería FIUNVA (desarrollo de software o diseño express de PCB)."
+- **Reglas Comerciales/Descuentos:** Lógicas volumétricas de precios (cálculo de IVA del 16%, tarifas de exportación de precios Mouser, y descuentos porcentuales según la escala del proyecto y el nivel de cliente).
+
+---
+
+**3. Motor de Inferencia (Inference Engine)**
+
+Es el procesador lógico que evalúa la **Base de Hechos** frente a la **Base de Conocimiento** para extraer deducciones y sugerencias avanzadas. FIUNVA opera con un **motor de inferencia de dos capas (doble vía)** para asegurar fiabilidad:
+
+**Vía Principal (Inferencia Semántica con Gemini):**
+- Un agente orquestador que analiza el texto del usuario para identificar intenciones semánticas y mapear componentes recomendados con un riguroso análisis de compatibilidad técnica.
+- Consulta la Base de Conocimiento en tiempo real (stock, precios, compatibilidades).
+- Genera un resumen de propuesta de pedido con explicación de las inferencias realizadas.
+
+**Vía de Respaldo (Sistema Experto Local Determinista):**
+- Si la API de IA no está disponible o el operador trabaja sin conexión, entra en acción una función lógica local en TypeScript (ej: `simulateExpertSystem`).
+- Este motor ejecuta un procesamiento basado en reglas clásicas: escanea patrones en el texto, calcula discrepancias de voltajes/componentes adicionales y genera las advertencias adecuadas de manera determinista.
+- Garantiza que el sistema permanezca funcional incluso sin acceso a servicios cloud.
+
+---
+
+**4. Interfaz de Usuario (User Interface)**
+
+La interfaz actúa como el puente bidireccional que permite la interacción fluida entre el sistema de expertos humanos (operadores), los clientes y la máquina:
+
+**Punto de Entrada del Cliente (La Sala de Chat):**
+- Permite al usuario interactuar en lenguaje informal, como si estuviera hablando de forma presencial con un ingeniero consultor técnico.
+- Acepta consultas en texto libre, extrae intenciones automáticamente y devuelve propuestas técnicas con precios convertidos a la divisa elegida.
+- Visualiza el estado de cotizaciones, sugerencias de compatibilidad y explicaciones paso a paso del razonamiento del sistema.
+
+**Visualizador y Explorador de Firestore Activo:**
+- Diseñado con altos estándares de usabilidad, permite a los administradores visualizar el estado interno y el comportamiento lógico del sistema experto.
+- Expone la **bitácora de razonamiento** generada por los agentes, mostrando qué reglas fueron aplicadas y por qué.
+- Permite **cargar y descargar la base de datos completa en archivos JSON** para auditorías locales rápidas y respaldos operacionales.
+
+**Portal de Operador (Consola Técnica):**
+- Una sección ágil donde los ingenieros humanos auditan, reajustan precios, aprueban la viabilidad técnica sugerida por la suite de agentes o rechazan solicitudes.
+- Retroalimentación activa: los operadores pueden rechazar propuestas y el sistema aprende de ello para futuras interacciones.
+- Visualización de colecciones Firestore en tiempo real: `products`, `orders`, `users`, `rules`.
+
+
+
 **Definición y tareas de agentes**
 
 La siguiente sección describe propiedades, dependencias y tareas mínimas para los agentes del sistema SE-FIUNVA.
