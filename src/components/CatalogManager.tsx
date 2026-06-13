@@ -13,12 +13,13 @@ interface CatalogManagerProps {
 export default function CatalogManager({
   products,
   onRefreshCatalog,
-  currentCurrency = "USD",
+  currentCurrency = "MXN",
   exchangeRates = { USD: 1, MXN: 17.50, EUR: 0.92 },
-  formatBasePrice = (price) => `$${price.toFixed(2)} USD`
+  formatBasePrice = (price) => `$${(price * 17.50).toFixed(2)} MXN`
 }: CatalogManagerProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState<number>(0);
+  const [editCurrency, setEditCurrency] = useState<"USD" | "MXN" | "EUR">("USD");
   const [editWebRefs, setEditWebRefs] = useState<string[]>([""]);
   const [editName, setEditName] = useState<string>("");
   const [editDesc, setEditDesc] = useState<string>("");
@@ -43,7 +44,7 @@ export default function CatalogManager({
   const [newUnit, setNewUnit] = useState("pza");
   const [newDesc, setNewDesc] = useState("");
   const [newWebRefs, setNewWebRefs] = useState<string[]>([""]);
-  const [newCurrency, setNewCurrency] = useState<"USD" | "MXN" | "EUR">("USD");
+  const [newCurrency, setNewCurrency] = useState<"USD" | "MXN" | "EUR">("MXN");
 
   const [isAdding, setIsAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
@@ -56,12 +57,12 @@ export default function CatalogManager({
     // If current selected currency matches the entry currency, use original price verbatim
     if (currentCurrency === origCurr) {
       if (currentCurrency === "MXN") {
-        return `$${origPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN`;
+        return `$${origPrice.toFixed(2)} MXN`;
       }
       if (currentCurrency === "EUR") {
-        return `€${origPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`;
+        return `€${origPrice.toFixed(2)} EUR`;
       }
-      return `$${origPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
+      return `$${origPrice.toFixed(2)} USD`;
     }
 
     // Otherwise, convert original price to USD, then from USD to currentCurrency
@@ -71,12 +72,12 @@ export default function CatalogManager({
     const converted = priceInUSD * targetRate;
 
     if (currentCurrency === "MXN") {
-      return `$${converted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN`;
+      return `$${converted.toFixed(2)} MXN`;
     }
     if (currentCurrency === "EUR") {
-      return `€${converted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`;
+      return `€${converted.toFixed(2)} EUR`;
     }
-    return `$${converted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
+    return `$${converted.toFixed(2)} USD`;
   };
 
   const handleAddNew = async (categoryType: "component" | "service") => {
@@ -101,11 +102,12 @@ export default function CatalogManager({
       const rateToUse = exchangeRates[newCurrency] || 1;
       const finalUSDPrice = Number(newPrice) / rateToUse;
 
-      // Establish preset categories and quantities
-      const finalCategory = categoryType === "service" ? "software_service" : "electronics";
-      const finalUnit = categoryType === "service" ? "hora" : "pza";
-      const finalStock = categoryType === "service" ? 9999 : 10;
-      const finalDesc = categoryType === "service" ? "Servicio profesional de ingeniería" : "Componente de base de datos";
+      // Select category dynamically based on user selections
+      const targetCategory = newCategory || (categoryType === "service" ? "software_service" : "electronics");
+      const isService = targetCategory === "software_service";
+      const finalUnit = newUnit || (isService ? "hora" : "pza");
+      const finalStock = isService ? 9999 : (Number(newStock) || 10);
+      const finalDesc = newDesc.trim() || (isService ? "Servicio profesional de ingeniería" : "Componente de base de datos");
 
       const response = await fetch("/api/products/add", {
         method: "POST",
@@ -113,7 +115,7 @@ export default function CatalogManager({
         body: JSON.stringify({
           id: generatedId,
           name: newName.trim(),
-          category: finalCategory,
+          category: targetCategory,
           price: finalUSDPrice,
           stock: finalStock,
           description: finalDesc,
@@ -136,7 +138,7 @@ export default function CatalogManager({
         setNewUnit("pza");
         setNewDesc("");
         setNewWebRefs([""]);
-        setNewCurrency("USD");
+        setNewCurrency("MXN");
         setShowAddComponent(false);
         setShowAddService(false);
         setTimeout(() => setSuccessMsg(null), 3000);
@@ -192,13 +194,14 @@ export default function CatalogManager({
 
   const startEdit = (product: Product) => {
     setEditingId(product.id);
-    setEditPrice(product.price);
+    setEditPrice(product.originalPrice !== undefined ? product.originalPrice : product.price);
+    setEditCurrency(product.originalCurrency || "USD");
     const existingRefs = product.webReferences && product.webReferences.length > 0
       ? [...product.webReferences]
       : [product.webReference || ""];
     setEditWebRefs(existingRefs.length > 0 ? existingRefs : [""]);
     setEditName(product.name);
-    setEditDesc(product.description);
+    setEditDesc(product.description || "");
   };
 
   const cancelEdit = () => {
@@ -213,6 +216,9 @@ export default function CatalogManager({
       const original = products.find(p => p.id === productId);
       if (!original) return;
 
+      const rateToUse = exchangeRates[editCurrency] || 1;
+      const finalUSDPrice = Number(editPrice) / rateToUse;
+
       const filteredRefs = editWebRefs.filter(url => url.trim() !== "");
       const response = await fetch("/api/products/edit", {
         method: "POST",
@@ -220,11 +226,13 @@ export default function CatalogManager({
         body: JSON.stringify({
           id: productId,
           name: editName,
-          price: Number(editPrice),
+          price: finalUSDPrice,
           stock: original.stock, // keep stock unchanged
           description: editDesc,
           webReferences: filteredRefs,
-          webReference: filteredRefs[0] || ""
+          webReference: filteredRefs[0] || "",
+          originalPrice: Number(editPrice),
+          originalCurrency: editCurrency
         })
       });
 
@@ -257,14 +265,11 @@ export default function CatalogManager({
         <div>
           <h3 className="font-bold text-slate-950 dark:text-slate-50 flex items-center gap-2 text-md sm:text-lg tracking-tight font-sans">
             <Cog className="w-5 h-5 text-blue-500 animate-spin-slow" />
-            Directorio Técnico del Catálogo Maestro (FIUNVA)
+            Directorio Técnico
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Administra bases de datos de componentes electrónicos, links de consulta web y tarifas fijas de servicios técnicos de ingeniería.
           </p>
-        </div>
-        <div className="mt-3 md:mt-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-55 pointer-events-none select-none text-[10px] sm:text-xs font-mono font-bold bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-850">
-          CONSOLE_PORT: 3000
         </div>
       </div>
 
@@ -314,9 +319,9 @@ export default function CatalogManager({
           </div>
 
           {showAddComponent && (
-            <div className="p-4 rounded-xl border border-blue-500 bg-slate-50/60 dark:bg-slate-950/45 flex flex-col gap-3">
+            <div className="p-4 rounded-xl border border-blue-500 bg-slate-50/60 dark:bg-slate-950/45 flex flex-col gap-3 animate-fade-in">
               <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-800">
-                <span className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wide">Nuevo Componente Electrónico</span>
+                <span className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wide">Registrar en Directorio Técnico</span>
                 <button onClick={() => setShowAddComponent(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                   <X className="w-4 h-4" />
                 </button>
@@ -341,9 +346,22 @@ export default function CatalogManager({
                 />
               </div>
 
+              {/* Description field */}
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Descripción</label>
+                <textarea
+                  rows={2}
+                  value={newDesc}
+                  onChange={(e) => setNewDesc(e.target.value)}
+                  placeholder="Descripción detallada o alcances..."
+                  className="w-full text-xs p-2 rounded bg-white dark:bg-slate-800 text-slate-805 dark:text-slate-105 border border-slate-250 dark:border-slate-700 outline-none focus:border-blue-500"
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Precio</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Precio / Tarifa Base</label>
                   <input
                     type="number"
                     step="0.01"
@@ -355,15 +373,15 @@ export default function CatalogManager({
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Moneda del Precio</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Moneda del Registro</label>
                   <select
                     value={newCurrency}
                     onChange={(e) => setNewCurrency(e.target.value as "USD" | "MXN" | "EUR")}
-                    className="w-full text-xs p-2 rounded bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-250 dark:border-slate-700 outline-none font-semibold"
+                    className="w-full text-xs p-2 rounded bg-white dark:bg-slate-800 text-slate-805 dark:text-slate-105 border border-slate-250 dark:border-slate-700 outline-none font-semibold cursor-pointer"
                   >
-                    <option value="USD">Dólares (USD)</option>
-                    <option value="MXN">Pesos Mexicanos (MXN)</option>
-                    <option value="EUR">Euros (EUR)</option>
+                    <option value="MXN" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100">Pesos Mexicanos (MXN)</option>
+                    <option value="USD" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100">Dólares (USD)</option>
+                    <option value="EUR" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100">Euros (EUR)</option>
                   </select>
                 </div>
               </div>
@@ -432,7 +450,7 @@ export default function CatalogManager({
                   onClick={() => handleAddNew("component")}
                   className="px-4 py-1.5 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded font-bold shadow-xs flex items-center gap-1 cursor-pointer"
                 >
-                  {isAdding ? "Registrando..." : "Registrar Componente"}
+                  {isAdding ? "Registrando..." : "Registrar Elemento"}
                 </button>
               </div>
             </div>
@@ -452,10 +470,7 @@ export default function CatalogManager({
                 >
                   <div className="flex justify-between items-start gap-2">
                     <div>
-                      <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-slate-200 dark:bg-slate-800 font-mono font-bold text-slate-600 dark:text-slate-400 select-all">
-                        {p.id}
-                      </span>
-                      <h5 className="font-bold text-xs sm:text-sm text-slate-850 dark:text-slate-100 mt-1.5">
+                      <h5 className="font-bold text-xs sm:text-sm text-slate-850 dark:text-slate-100">
                         {p.name}
                       </h5>
                     </div>
@@ -490,26 +505,28 @@ export default function CatalogManager({
                           className="w-full text-xs font-semibold p-2 rounded bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-250 dark:border-slate-700 outline-none focus:border-blue-500"
                         />
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase block mb-1">Precio Unitario Base (USD)</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={editPrice}
-                            onChange={(e) => setEditPrice(Number(e.target.value))}
-                            className="w-full text-xs font-mono p-2 rounded bg-white dark:bg-slate-800 text-slate-100 border border-slate-250 dark:border-slate-700 outline-none"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase block mb-1">Unidad</label>
-                          <div className="text-xs p-2 bg-slate-100 dark:bg-slate-950 text-slate-500 rounded border border-slate-200 dark:border-slate-800 font-mono select-none">
-                            {p.unit}
-                          </div>
-                        </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 dark:text-slate-505 uppercase block mb-1">Precio Unitario Base ({editCurrency})</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editPrice}
+                          onChange={(e) => setEditPrice(Number(e.target.value))}
+                          className="w-full text-xs font-mono p-2 rounded bg-white dark:bg-slate-800 text-slate-850 dark:text-slate-100 border border-slate-250 dark:border-slate-700 outline-none"
+                        />
                       </div>
                       <div>
-                        <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase block mb-1">Enlaces de Referencia (Mouser / DigiKey / Pololu)</label>
+                        <label className="text-[10px] font-bold text-slate-400 dark:text-slate-505 uppercase block mb-1">Descripción del Componente</label>
+                        <textarea
+                          rows={2}
+                          value={editDesc}
+                          onChange={(e) => setEditDesc(e.target.value)}
+                          placeholder="Descripción del componente..."
+                          className="w-full text-xs p-2 rounded bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-250 dark:border-slate-705 outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 dark:text-slate-505 uppercase block mb-1">Enlaces de Referencia (Mouser / DigiKey / Pololu)</label>
                         <div className="flex flex-col gap-2.5 bg-slate-100 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
                           {editWebRefs.map((ref, idx) => (
                             <div key={idx} className="flex items-center gap-1.5">
@@ -639,7 +656,7 @@ export default function CatalogManager({
             <div className="flex items-center gap-2">
               <Hammer className="w-4.5 h-4.5 text-indigo-550" />
               <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-                Catálogo de Servicios de Ingeniería (Tarifas)
+                Catálogo de Productos y Servicios de Ingeniería
               </h4>
             </div>
             <button
@@ -647,13 +664,14 @@ export default function CatalogManager({
                 setShowAddService(!showAddService);
                 setAddError(null);
                 setNewCategory("software_service");
-                setNewUnit("hr");
+                setNewUnit("hora");
                 setNewId("");
                 setNewName("");
                 setNewPrice(0);
                 setNewStock(9999); // services usually have abundant "stock"
                 setNewDesc("");
                 setNewWebRefs([""]);
+                setNewCurrency("MXN");
               }}
               className="px-2.5 py-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg flex items-center gap-1 transition-all cursor-pointer shadow-xs select-none"
             >
@@ -663,9 +681,9 @@ export default function CatalogManager({
           </div>
 
           {showAddService && (
-            <div className="p-4 rounded-xl border border-indigo-500 bg-slate-50/60 dark:bg-slate-950/45 flex flex-col gap-3">
+            <div className="p-4 rounded-xl border border-indigo-500 bg-slate-50/60 dark:bg-slate-950/45 flex flex-col gap-3 animate-fade-in">
               <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-800">
-                <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">Nuevo Servicio de Ingeniería</span>
+                <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">Registrar en Catálogo / Directorio</span>
                 <button onClick={() => setShowAddService(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                   <X className="w-4 h-4" />
                 </button>
@@ -679,7 +697,7 @@ export default function CatalogManager({
               )}
 
               <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Nombre del Servicio</label>
+                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Nombre</label>
                 <input
                   type="text"
                   required
@@ -690,37 +708,96 @@ export default function CatalogManager({
                 />
               </div>
 
+              {/* CLASSIFICATION CONTROLS */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Tarifa Profesional</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Tipo de Registro</label>
+                  <select
+                    value={newCategory === "software_service" ? "service" : "product"}
+                    onChange={(e) => {
+                      if (e.target.value === "service") {
+                        setNewCategory("software_service");
+                        setNewUnit("hora");
+                        setNewStock(9999);
+                      } else {
+                        setNewCategory("electronics");
+                        setNewUnit("pza");
+                        setNewStock(10);
+                      }
+                    }}
+                    className="w-full text-xs p-2 rounded bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-250 dark:border-slate-700 outline-none font-semibold cursor-pointer"
+                  >
+                    <option value="service" className="bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100">🛠️ Servicio Profesional</option>
+                    <option value="product" className="bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100">📦 Producto / Hardware</option>
+                  </select>
+                </div>
+                <div>
+                  {newCategory !== "software_service" ? (
+                    <>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Categoría de Producto</label>
+                      <select
+                        value={newCategory}
+                        onChange={(e) => setNewCategory(e.target.value as any)}
+                        className="w-full text-xs p-2 rounded bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-250 dark:border-slate-700 outline-none font-semibold cursor-pointer"
+                      >
+                        <option value="electronics" className="bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100">Electrónica</option>
+                        <option value="robotics" className="bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100">Robótica</option>
+                        <option value="bundles" className="bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100">Paquetes / Kits</option>
+                      </select>
+                    </>
+                  ) : (
+                    <>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Clasificación Automática</label>
+                      <div className="w-full text-xs p-2 rounded bg-slate-100 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-800 select-none font-medium">
+                        Servicio de Ingeniería
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Descripción</label>
+                <textarea
+                  rows={2}
+                  value={newDesc}
+                  onChange={(e) => setNewDesc(e.target.value)}
+                  placeholder="Descripción detallada o alcances..."
+                  className="w-full text-xs p-2 rounded bg-white dark:bg-slate-800 text-slate-805 dark:text-slate-105 border border-slate-250 dark:border-slate-700 outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Precio / Tarifa Base</label>
                   <input
                     type="number"
                     step="0.01"
                     required
                     value={newPrice || ""}
                     onChange={(e) => setNewPrice(Number(e.target.value))}
-                    className="w-full text-xs font-mono p-2 rounded bg-white dark:bg-slate-800 text-slate-850 dark:text-slate-100 border border-slate-250 dark:border-slate-700 outline-none"
+                    className="w-full text-xs font-mono p-2 rounded bg-white dark:bg-slate-800 text-slate-855 dark:text-slate-101 border border-slate-250 dark:border-slate-700 outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Moneda del Precio</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Moneda del Registro</label>
                   <select
                     value={newCurrency}
                     onChange={(e) => setNewCurrency(e.target.value as "USD" | "MXN" | "EUR")}
-                    className="w-full text-xs p-2 rounded bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-250 dark:border-slate-700 outline-none font-semibold"
+                    className="w-full text-xs p-2 rounded bg-white dark:bg-slate-800 text-slate-805 dark:text-slate-105 border border-slate-250 dark:border-slate-700 outline-none font-semibold cursor-pointer"
                   >
-                    <option value="USD">Dólares (USD)</option>
-                    <option value="MXN">Pesos Mexicanos (MXN)</option>
-                    <option value="EUR">Euros (EUR)</option>
+                    <option value="MXN" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100">Pesos Mexicanos (MXN)</option>
+                    <option value="USD" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100">Dólares (USD)</option>
+                    <option value="EUR" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100">Euros (EUR)</option>
                   </select>
                 </div>
               </div>
 
-              <div className="flex justify-end gap-1.5 select-none">
+              <div className="flex justify-end gap-1.5 select-none font-sans font-bold">
                 <button
                   type="button"
                   onClick={() => setShowAddService(false)}
-                  className="px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 rounded font-semibold border border-slate-200 dark:border-slate-700 cursor-pointer"
+                  className="px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 cursor-pointer font-semibold"
                 >
                   Cancelar
                 </button>
@@ -728,9 +805,9 @@ export default function CatalogManager({
                   type="button"
                   disabled={isAdding}
                   onClick={() => handleAddNew("service")}
-                  className="px-4 py-1.5 text-xs text-white bg-indigo-600 hover:bg-indigo-700 rounded font-bold shadow-xs flex items-center gap-1 cursor-pointer"
+                  className="px-4 py-1.5 text-xs text-white bg-indigo-600 hover:bg-indigo-700 rounded shadow-xs flex items-center gap-1 cursor-pointer"
                 >
-                  {isAdding ? "Registrando..." : "Registrar Servicio"}
+                  {isAdding ? "Registrando..." : "Registrar Elemento"}
                 </button>
               </div>
             </div>
@@ -750,10 +827,7 @@ export default function CatalogManager({
                 >
                   <div className="flex justify-between items-start gap-2">
                     <div>
-                      <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-slate-205 dark:bg-indigo-950/40 font-mono font-bold text-indigo-700 dark:text-indigo-400 border border-indigo-200/20">
-                        {p.id}
-                      </span>
-                      <h5 className="font-bold text-xs sm:text-sm text-slate-850 dark:text-slate-100 mt-1.5">
+                      <h5 className="font-bold text-xs sm:text-sm text-slate-850 dark:text-slate-100">
                         {p.name}
                       </h5>
                       <p className="text-xs text-slate-400 dark:text-slate-400 mt-1 lines-2 leading-relaxed">
@@ -783,7 +857,7 @@ export default function CatalogManager({
                   {isEditing ? (
                     <div className="mt-3.5 bg-slate-50 dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800 flex flex-col gap-3">
                       <div>
-                        <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase block mb-1">Tarifa del Servicio Base (USD)</label>
+                        <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase block mb-1">Tarifa del Servicio Base ({editCurrency})</label>
                         <div className="relative">
                           <DollarSign className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400" />
                           <input
@@ -826,7 +900,7 @@ export default function CatalogManager({
                       <div>
                         <span className="text-[10px] block uppercase font-bold tracking-wider text-slate-400 dark:text-slate-505">Tarifa Profesional ({currentCurrency})</span>
                         <span className="font-mono font-bold text-sm text-indigo-700 dark:text-indigo-400">
-                          {formatProductPrice(p)} <span className="text-[10px] font-normal text-slate-400 uppercase">/ {p.unit}</span>
+                          {formatProductPrice(p)}
                         </span>
                       </div>
                       

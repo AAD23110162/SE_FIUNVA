@@ -11,17 +11,27 @@ export default function AgentStatusFlow({ steps }: AgentStatusFlowProps) {
     "Atención al Cliente": {
       icon: UserCheck,
       color: "from-blue-500/20 to-indigo-500/20 text-blue-400 border border-blue-500/30",
-      description: "Recibe e interpreta lenguaje natural, extrae intenciones de compra y clasifica solicitudes de hardware/software.",
+      description: "El 'Front-Desk' del sistema. Entiende las intenciones del usuario, ofrece empatía, realiza el triage de consultas, delimita requerimientos preliminares de proyectos y escala tareas.",
     },
     "Generador de Pedido": {
       icon: Cpu,
       color: "from-amber-500/20 to-orange-550/20 text-amber-400 border border-amber-500/30",
-      description: "Ejecuta algoritmos del sistema experto: valida stock físico, calcula descuentos por volumen y tier, e infiere sugerencias técnicas.",
+      description: "Ejecuta algoritmos del sistema experto: valida disponibilidad del hardware, calcula descuentos por volumen y tier, e infiere sugerencias técnicas.",
     },
     "Supervisor Explicador": {
       icon: ShieldCheck,
       color: "from-emerald-500/20 to-teal-555/20 text-emerald-400 border border-emerald-500/30",
       description: "Verifica integridades lógico-técnicas del pedido y redacta la bitácora de razonamiento experto para validación humana.",
+    },
+    "Planificador y Cotizador": {
+      icon: Cpu,
+      color: "from-amber-500/20 to-orange-550/20 text-amber-400 border border-amber-500/30",
+      description: "El 'Arquitecto/Vendedor'. Desglosa el proyecto en componentes (BOM), estima mano de obra de software, consulta disponibilidad técnica, busca referencias web y arma presupuestos.",
+    },
+    "Soporte Técnico y Validación": {
+      icon: ShieldCheck,
+      color: "from-emerald-500/20 to-teal-555/20 text-emerald-400 border border-emerald-500/30",
+      description: "El 'Ingeniero Senior'. Asegura compatibilidad técnica y viabilidad de la cotización, escribe la bitácora de razonamiento experto, y ofrece soporte al cliente sobre el estado de proyectos.",
     },
   };
 

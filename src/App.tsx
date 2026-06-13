@@ -30,14 +30,25 @@ import {
   Search,
   UserPlus
 } from "lucide-react";
-import { Product, Order, UserProfile, Message, AgentStep, UserRole } from "./types";
+import { Product, Order, UserProfile, Message, AgentStep, UserRole, KnowledgeEntry } from "./types";
 import AgentStatusFlow from "./components/AgentStatusFlow";
 import DatabaseVisualizer from "./components/DatabaseVisualizer";
 import CatalogManager from "./components/CatalogManager";
 import OrderQueue from "./components/OrderQueue";
 import ClientList from "./components/ClientList";
+import ClientPortalModal from "./components/ClientPortalModal";
+import FormattedMessage from "./components/FormattedMessage";
 import { auth } from "./lib/firebase";
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
+
+const sanitizeChatText = (text: string): string => {
+  if (!text) return "";
+  // Strip triple and double asterisks
+  let cleaned = text.replace(/\*\*\*/g, "").replace(/\*\*/g, "");
+  // Clean header-like lines that start with ### or ## or #
+  cleaned = cleaned.replace(/^###\s+/gm, "").replace(/^##\s+/gm, "").replace(/^#\s+/gm, "");
+  return cleaned;
+};
 
 export default function App() {
   // Theme state (Dark Mode or Light Mode matching correct contrast classes)
@@ -53,9 +64,11 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [usersList, setUsersList] = useState<UserProfile[]>([]);
+  const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeEntry[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [isResetting, setIsResetting] = useState(false);
   const [isLocalFallback, setIsLocalFallback] = useState(false);
+  const [isPortalOpen, setIsPortalOpen] = useState(false);
 
   // Multi-currency operational states
   const [currentCurrency, setCurrentCurrency] = useState<"USD" | "MXN" | "EUR">("MXN");
@@ -71,13 +84,14 @@ export default function App() {
   const formatBasePrice = (priceInUSD: number) => {
     const rate = exchangeRates[currentCurrency] || 1;
     const converted = priceInUSD * rate;
+    const fixedValue = converted.toFixed(2);
     if (currentCurrency === "MXN") {
-      return `$${converted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN`;
+      return `$${fixedValue} MXN`;
     }
     if (currentCurrency === "EUR") {
-      return `€${converted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`;
+      return `€${fixedValue} EUR`;
     }
-    return `$${converted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
+    return `$${fixedValue} USD`;
   };
 
   const handleCurrencyChange = async (targetCurr: "USD" | "MXN" | "EUR") => {
@@ -126,8 +140,8 @@ export default function App() {
 
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([
     { agentName: "Atención al Cliente", status: "idle", output: "" },
-    { agentName: "Generador de Pedido", status: "idle", output: "" },
-    { agentName: "Supervisor Explicador", status: "idle", output: "" }
+    { agentName: "Planificador y Cotizador", status: "idle", output: "" },
+    { agentName: "Soporte Técnico y Validación", status: "idle", output: "" }
   ]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -137,11 +151,13 @@ export default function App() {
   const [registeredName, setRegisteredName] = useState<string>("");
   const [clientCode, setClientCode] = useState<string>("");
   const [registrationState, setRegistrationState] = useState<{
-    step: "none" | "waiting_name" | "waiting_code" | "waiting_new_name" | "waiting_new_email" | "waiting_new_phone" | "waiting_new_prefer" | "offering_registration_after_fail";
+    step: "none" | "waiting_name" | "waiting_code" | "waiting_new_name" | "waiting_new_email" | "waiting_new_phone" | "waiting_new_prefer" | "offering_registration_after_fail" | "waiting_onboarding_choice" | "waiting_order_notes";
     tempName?: string;
     tempEmail?: string;
     tempPhone?: string;
     tempCode?: string;
+    postOnboardingAction?: "resubmit_visto_bueno";
+    savedOrderQuery?: string;
   }>({ step: "none" });
 
   const [sessionEmail, setSessionEmail] = useState<string>(() => {
@@ -150,6 +166,10 @@ export default function App() {
 
   const [quotePendingQuery, setQuotePendingQuery] = useState<string | null>(null);
 
+  const matchedClient = clientType === "registrado" && clientCode
+    ? usersList.find(u => u.uid === clientCode && u.role === "client")
+    : null;
+
   const activeProfile: UserProfile = activeRole === "admin" ? {
     uid: "usr_admin",
     name: "Administrador Principal (CETI)",
@@ -157,11 +177,13 @@ export default function App() {
     role: "admin",
     clientTier: "standard"
   } : {
-    uid: "usr_client",
-    name: clientType === "registrado" ? registeredName : (clientType === "integrado" ? "Cliente Integrado" : "Cliente Nuevo"),
-    email: clientType === "registrado" ? "registrado@fiunva.com" : (clientType === "integrado" ? "integrado@fiunva.com" : "nuevo@fiunva.com"),
+    uid: matchedClient ? matchedClient.uid : "usr_client",
+    name: matchedClient ? matchedClient.name : (clientType === "registrado" ? registeredName : (clientType === "integrado" ? "Cliente Integrado" : "Cliente Nuevo")),
+    email: matchedClient ? (matchedClient.email || "registrado@fiunva.com") : (clientType === "registrado" ? "registrado@fiunva.com" : (clientType === "integrado" ? "integrado@fiunva.com" : "nuevo@fiunva.com")),
     role: "client",
-    clientTier: clientType === "registrado" ? "vip" : (clientType === "integrado" ? "frequent" : "standard")
+    clientTier: matchedClient ? matchedClient.clientTier : (clientType === "registrado" ? "vip" : (clientType === "integrado" ? "frequent" : "standard")),
+    phone: matchedClient ? matchedClient.phone : undefined,
+    preferredContact: matchedClient ? matchedClient.preferredContact : undefined
   };
 
   // Synchronize dynamic Firebase Session and Auto-onboarding for Administrator 
@@ -183,6 +205,53 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Auto-link Google Account on login or when usersList updates
+  useEffect(() => {
+    if (sessionEmail && sessionEmail !== "a23110162@ceti.mx" && usersList.length > 0) {
+      const matched = usersList.find(
+        (u) => u.email?.toLowerCase().trim() === sessionEmail.toLowerCase().trim() && u.role === "client"
+      );
+      if (matched) {
+        setClientType("registrado");
+        setRegisteredName(matched.name);
+        setClientCode(matched.uid);
+      } else {
+        // Sign-in successful but not in our custom clients database: Auto-register Google client!
+        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        let newCode = "";
+        let isUnique = false;
+        let limit = 0;
+        while (!isUnique && limit < 100) {
+          newCode = "";
+          for (let i = 0; i < 6; i++) {
+            newCode += chars.charAt(Math.floor(Math.random() * chars.length));
+          }
+          isUnique = !usersList.some((u) => u.uid.toLowerCase() === newCode.toLowerCase());
+          limit++;
+        }
+        
+        const googleUser = auth.currentUser;
+        const finalName = googleUser?.displayName || "Cliente Google";
+        const newUserPayload: UserProfile = {
+          uid: newCode,
+          name: finalName,
+          email: sessionEmail,
+          role: "client",
+          clientTier: "standard",
+          preferredContact: "correo"
+        };
+        
+        handleSaveUser(newUserPayload)
+          .then(() => {
+            setClientType("registrado");
+            setRegisteredName(finalName);
+            setClientCode(newCode);
+          })
+          .catch(err => console.error("Error auto-saving google client:", err));
+      }
+    }
+  }, [sessionEmail, usersList]);
+
   // Enforce security rule: if sessionEmail is not the principal administrator email:
   // 1. Kick them out of admin mode immediately if they are in it.
   // 2. Prevent switching to admin.
@@ -197,6 +266,7 @@ export default function App() {
     fetchCatalog();
     fetchOrders();
     fetchUsers();
+    fetchKnowledgeBase();
   }, []);
 
   // Update theme tag dynamically
@@ -250,6 +320,19 @@ export default function App() {
       }
     } catch (error) {
       console.error("Error cargando directorio de clientes:", error);
+    }
+  };
+
+  // Fetch knowledge base entries
+  const fetchKnowledgeBase = async () => {
+    try {
+      const response = await fetch("/api/knowledge-base");
+      if (response.ok) {
+        const data = await response.json();
+        setKnowledgeBase(data);
+      }
+    } catch (error) {
+      console.error("Error cargando base de conocimiento:", error);
     }
   };
 
@@ -335,9 +418,40 @@ export default function App() {
         if (data.users) {
           setUsersList(data.users);
         }
+        if (data.knowledgeBase) {
+          setKnowledgeBase(data.knowledgeBase);
+        }
       }
     } catch (error) {
       console.error("Error cargando reset database:", error);
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  // Import uploaded database values from custom JSON
+  const handleImportDatabase = async (jsonData: any) => {
+    setIsResetting(true);
+    try {
+      const response = await fetch("/api/system/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(jsonData)
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.products) setProducts(data.products);
+        if (data.orders) setOrders(data.orders);
+        if (data.users) setUsersList(data.users);
+        if (data.knowledgeBase) setKnowledgeBase(data.knowledgeBase);
+        return { success: true, message: data.message || "Base de datos importada exitosamente." };
+      } else {
+        const data = await response.json();
+        return { success: false, message: data.error || "Ocurrió un error en el servidor al intentar importar los datos." };
+      }
+    } catch (error: any) {
+      console.error("Error cargando import database:", error);
+      return { success: false, message: error.message || "Error de red al intentar importar los datos." };
     } finally {
       setIsResetting(false);
     }
@@ -368,8 +482,8 @@ export default function App() {
     setIsGenerating(true);
     setAgentSteps([
       { agentName: "Atención al Cliente", status: "thinking", output: "Escuchando intenciones..." },
-      { agentName: "Generador de Pedido", status: "idle", output: "Buscando referencias..." },
-      { agentName: "Supervisor Explicador", status: "idle", output: "Tratando compatibilidad..." }
+      { agentName: "Planificador y Cotizador", status: "idle", output: "Esperando delegación..." },
+      { agentName: "Soporte Técnico y Validación", status: "idle", output: "Esperando validación..." }
     ]);
 
     try {
@@ -379,7 +493,8 @@ export default function App() {
         body: JSON.stringify({
           message: queryText,
           clientProfile: activeProfile,
-          currency: quoteCurrency
+          currency: quoteCurrency,
+          history: chatHistory
         })
       });
 
@@ -400,11 +515,11 @@ export default function App() {
             output: `Mapeado. Intento: "${results.agent1?.intent || 'Cotización Componentes'}"`
           },
           {
-            agentName: "Generador de Pedido",
+            agentName: "Planificador y Cotizador",
             status: "thinking",
             output: `Efectuando consulta referencial web y aplicando descuentos...`
           },
-          { agentName: "Supervisor Explicador", status: "idle", output: "" }
+          { agentName: "Soporte Técnico y Validación", status: "idle", output: "" }
         ]);
 
         setTimeout(() => {
@@ -415,22 +530,22 @@ export default function App() {
               output: `Intención: "${results.agent1?.intent || 'Cotización Componentes'}"`
             },
             {
-              agentName: "Generador de Pedido",
+              agentName: "Planificador y Cotizador",
               status: "completed",
               output: `Mapeo completado. ${results.agent2?.proposedItems?.length || 0} items verificados en la web.`
             },
             {
-              agentName: "Supervisor Explicador",
+              agentName: "Soporte Técnico y Validación",
               status: "thinking",
-              output: `Compilando informe y cargando reglas expertas...`
+              output: `Verificando viabilidad técnica y compatibilidad de equipos...`
             }
           ]);
 
           setTimeout(() => {
             setAgentSteps([
-              { agentName: "Atención al Cliente", status: "completed", output: "Mapeo de intención: OK" },
-              { agentName: "Generador de Pedido", status: "completed", output: "Validado en mouser.com / pololu.com" },
-              { agentName: "Supervisor Explicador", status: "completed", output: "Propuesta de cotización generada." }
+              { agentName: "Atención al Cliente", status: "completed", output: "Triage y clasificación: OK" },
+              { agentName: "Planificador y Cotizador", status: "completed", output: "BOM y costeo web: OK" },
+              { agentName: "Soporte Técnico y Validación", status: "completed", output: "Diseño viable. Automatización registrada." }
             ]);
 
             // Append final agent reply
@@ -440,7 +555,7 @@ export default function App() {
               {
                 id: `msg-agn-${Date.now()}`,
                 sender: "agent",
-                text: `${finalReplyText}\n\n**${results.agent3.salesSummary}**\n\n*Nota del sistema:* Cotización registrada bajo el ID **${result.orderCreated?.id || 'ORD-NEW'}** en estatus pendiente de autorización.`,
+                text: `${finalReplyText}\n\n${results.agent3.salesSummary}\n\n*Nota del sistema:* Cotización registrada bajo el ID **${result.orderCreated?.id || 'ORD-NEW'}** en estatus pendiente de autorización.`,
                 timestamp: new Date().toISOString(),
                 extractedInfo: {
                   intent: results.agent1.intent,
@@ -465,8 +580,8 @@ export default function App() {
       setIsGenerating(false);
       setAgentSteps([
         { agentName: "Atención al Cliente", status: "error", output: "Falla de red." },
-        { agentName: "Generador de Pedido", status: "error", output: "Invocación truncada." },
-        { agentName: "Supervisor Explicador", status: "error", output: "Error." }
+        { agentName: "Planificador y Cotizador", status: "error", output: "Invocación truncada." },
+        { agentName: "Soporte Técnico y Validación", status: "error", output: "Error." }
       ]);
       setChatHistory((prev) => [
         ...prev,
@@ -498,6 +613,126 @@ export default function App() {
     };
     setChatHistory((prev) => [...prev, userMsg]);
 
+    let finalQueryForAPI = query;
+    let finalNotes: string | undefined = undefined;
+
+    // 0. Compute context parameters
+    const lastAgentMsgObj = [...chatHistory].reverse().find(m => m.sender === "agent");
+    const lastAgentMsg = lastAgentMsgObj ? lastAgentMsgObj.text : "";
+    const isUserLoggedIn = clientType === "registrado" || (sessionEmail && sessionEmail.trim() !== "" && !sessionEmail.includes("nuevo@fiunva.com") && !sessionEmail.includes("integrado@fiunva.com"));
+
+    const isVistoBuenoPrompt = lastAgentMsg && (
+      lastAgentMsg.includes("Visto Bueno") ||
+      lastAgentMsg.includes("visto bueno") ||
+      lastAgentMsg.includes("dar tu Visto Bueno") ||
+      lastAgentMsg.includes("¿Nos das tu **Visto Bueno**")
+    );
+
+    const isUserAffirmative = query.trim().toLowerCase() === "sí" || 
+                              query.trim().toLowerCase() === "si" || 
+                              query.trim().toLowerCase().includes("visto") || 
+                              query.trim().toLowerCase().includes("bueno") ||
+                              query.trim().toLowerCase() === "ok" ||
+                              query.trim().toLowerCase() === "de acuerdo" ||
+                              query.trim().toLowerCase() === "proceder" ||
+                              query.trim().toLowerCase() === "aceptar";
+
+    // Handle onboarding Choice step inside chatbot dialog
+    if (registrationState.step === "waiting_onboarding_choice") {
+      setIsGenerating(true);
+      setTimeout(() => {
+        const cleaned = query.trim().toLowerCase();
+        if (cleaned === "1" || cleaned.includes("nuevo") || cleaned.includes("registrar") || cleaned.includes("crear")) {
+          setRegistrationState({ step: "waiting_new_name", postOnboardingAction: "resubmit_visto_bueno" });
+          const botMsg: Message = {
+            id: `msg-onon-1-${Date.now()}`,
+            sender: "agent",
+            text: "¡Excelente! Comencemos por crear tu registro de nuevo cliente de forma guiada. Por favor escribe tu **Nombre Completo**:",
+            timestamp: new Date().toISOString()
+          };
+          setChatHistory((prev) => [...prev, botMsg]);
+        } else if (cleaned === "2" || cleaned.includes("reintentar") || cleaned.includes("código") || cleaned.includes("codigo") || cleaned.includes("existente")) {
+          setRegistrationState({ step: "waiting_code", postOnboardingAction: "resubmit_visto_bueno" });
+          const botMsg: Message = {
+            id: `msg-onon-2-${Date.now()}`,
+            sender: "agent",
+            text: "De acuerdo. Por favor escribe tu **Código de Cliente** de 6 caracteres (ej: VIP-777):",
+            timestamp: new Date().toISOString()
+          };
+          setChatHistory((prev) => [...prev, botMsg]);
+        } else {
+          const botMsg: Message = {
+            id: `msg-onon-fail-${Date.now()}`,
+            sender: "agent",
+            text: "⚠️ Opción no reconocida. Por favor, especifica **1** para registrarte como un Cliente Nuevo, o **2** para usar un Código de Cliente existente. También puedes iniciar sesión arriba con Google para sincronizar tus datos.",
+            timestamp: new Date().toISOString()
+          };
+          setChatHistory((prev) => [...prev, botMsg]);
+        }
+        setIsGenerating(false);
+      }, 700);
+      return;
+    }
+
+    // Intercept checkout confirmation if client NOT logged in
+    if (!isUserLoggedIn && isVistoBuenoPrompt && isUserAffirmative) {
+      setIsGenerating(true);
+      setTimeout(() => {
+        setRegistrationState({ step: "waiting_onboarding_choice" });
+        const botMsg: Message = {
+          id: `msg-intercept-auth-${Date.now()}`,
+          sender: "agent",
+          text: `### 👤 Identificación del Cliente Requerida
+
+¡Estupendo! Antes de autorizar definitivamente y registrar esta cotización en nuestro gestor de pedidos, **es necesario contar con tus datos de cliente**.
+
+¿Cómo deseas identificarte?
+
+1. **Registrarte como Nuevo Cliente** paso a paso aquí mismo en este chat (Nombre, Correo, Teléfono, Medio preferido).
+2. **Ingresar un Código de Cliente** de 6 caracteres si ya cuentas con un registro previo.
+3. **Iniciar Sesión con Google** haciendo clic en el banner superior o en tu portal.
+
+*Por favor, responde **1** o **2** en el chat según tu elección. Al concluir tu registro volveremos de inmediato a guardar tu cotización.*`,
+          timestamp: new Date().toISOString()
+        };
+        setChatHistory((prev) => [...prev, botMsg]);
+        setIsGenerating(false);
+      }, 700);
+      return;
+    }
+
+    // Intercept positive quote acceptance if logged in to allow adding observations/notes
+    if (isUserLoggedIn && isVistoBuenoPrompt && isUserAffirmative && registrationState.step !== "waiting_order_notes") {
+      setIsGenerating(true);
+      setTimeout(() => {
+        setRegistrationState({ step: "waiting_order_notes", savedOrderQuery: query });
+        const botMsg: Message = {
+          id: `msg-notes-collect-${Date.now()}`,
+          sender: "agent",
+          text: `### 📝 ¿Deseas agregar una observación o nota extra a tu proyecto?
+
+Tienes la opción de adjuntar comentarios o requerimientos especiales de seguimiento (como especificaciones mecánicas del robot, condiciones particulares del sitio, plazos tentativos de entrega, o detalles de software).
+
+*Escribe tus observaciones a continuación para guardarlas junto con tu cotización, o responde **"no"** o **"ninguna"** si prefieres continuar sin añadir notas.*`,
+          timestamp: new Date().toISOString()
+        };
+        setChatHistory((prev) => [...prev, botMsg]);
+        setIsGenerating(false);
+      }, 700);
+      return;
+    }
+
+    // Resolve notes state
+    if (registrationState.step === "waiting_order_notes") {
+      const notesClean = query.trim().toLowerCase();
+      if (notesClean !== "no" && notesClean !== "ninguna" && notesClean !== "no, gracias" && notesClean !== "no gracias") {
+        finalNotes = query;
+      }
+      finalQueryForAPI = registrationState.savedOrderQuery || "visto bueno";
+      setRegistrationState({ step: "none" });
+      // Proceed seamlessly to the fetch with custom notes!
+    }
+
     // Handle interactive validation for registered clients inside the chatbot dialog
     if (registrationState.step === "waiting_name") {
       setIsGenerating(true);
@@ -518,6 +753,7 @@ export default function App() {
     if (registrationState.step === "waiting_code") {
       setIsGenerating(true);
       setTimeout(() => {
+        const hasTempName = !!registrationState.tempName;
         const finalName = registrationState.tempName || "Cliente Registrado";
         
         // Exact matching inside database (usersList active clients)
@@ -527,22 +763,24 @@ export default function App() {
             u.uid.toLowerCase().trim() === query.trim().toLowerCase()
         );
 
-        // Does the name also match roughly or exactly (case-insensitive substring overlap)
-        const nameMatches =
+        // Name verification is only used if a name was initially supplied (legacy support)
+        const nameMatches = !hasTempName || (
           matched &&
           (matched.name.toLowerCase().trim().includes(finalName.toLowerCase().trim()) ||
-            finalName.toLowerCase().trim().includes(matched.name.toLowerCase().trim()));
+            finalName.toLowerCase().trim().includes(matched.name.toLowerCase().trim()))
+        );
 
         if (matched && nameMatches) {
           setClientType("registrado");
           setRegisteredName(matched.name);
           setClientCode(matched.uid);
+          const isFromPostOnboarding = registrationState.postOnboardingAction === "resubmit_visto_bueno";
           setRegistrationState({ step: "none" });
 
           const okBotMsg: Message = {
             id: `msg-reg-ok-${Date.now()}`,
             sender: "agent",
-            text: `¡Validación de Cliente Exitosa! 🎉\n\nBienvenido de vuelta, **${matched.name}**. Tu perfil ha sido sincronizado bajo el código **${matched.uid}**.\n\nHemos actualizado tu rol a **Cliente: ${matched.name}**, reconociendo todos tus privilegios de nivel **${matched.clientTier.toUpperCase()}** (descuento automático aplicado en todos tus componentes, robótica y cotizaciones de desarrollo técnico).`,
+            text: `¡Validación de Cliente Exitosa! 🎉\n\nBienvenido de vuelta, **${matched.name}**. Tu perfil ha sido sincronizado bajo el código **${matched.uid}**.\n\nHemos actualizado tu rol a **Cliente: ${matched.name}**, reconociendo todos tus privilegios de nivel **${matched.clientTier.toUpperCase()}** (descuento automático aplicado en todos tus componentes, robótica y cotizaciones de desarrollo técnico).${isFromPostOnboarding ? "\n\n👉 **¡Validación Exitosa!** Como tenías una cotización preliminar en proceso, por favor escribe **\"visto bueno\"** o **\"sí\"** para registrar y autorizar tu cotización provisional bajo tu cuenta de cliente." : ""}`,
             timestamp: new Date().toISOString()
           };
           setChatHistory((prev) => [...prev, okBotMsg]);
@@ -551,14 +789,18 @@ export default function App() {
           // If name/code does not match or user is not found, offer options to register as a new client
           setRegistrationState({
             step: "offering_registration_after_fail",
-            tempName: finalName,
+            tempName: hasTempName ? finalName : undefined,
             tempCode: query
           });
+
+          const failText = hasTempName
+            ? `⚠️ No logramos verificar un cliente registrado que coincida con el nombre "${finalName}" y el código de acceso "${query}" en nuestro sistema.`
+            : `⚠️ No logramos verificar un cliente registrado que coincida con el código de acceso "${query}" en nuestro sistema.`;
 
           const failBotMsg: Message = {
             id: `msg-reg-fail-${Date.now()}`,
             sender: "agent",
-            text: `⚠️ No logramos verificar un cliente registrado que coincida con el nombre **"${finalName}"** y código de acceso **"${query}"** en nuestro sistema.\n\n¿Deseas registrarte como un **Cliente Nuevo** ahora mismo?\n\n* Escribe **1** o **Registrarme** para registrarte como Cliente Nuevo.\n* Escribe **2** o **Reintentar** para volver a intentar tu validación de cliente registrado.`,
+            text: `${failText}\n\n¿Deseas registrarte como un **Cliente Nuevo** ahora mismo?\n\n* Escribe **1** o **Registrarme** para registrarte como Cliente Nuevo.\n* Escribe **2** o **Reintentar** para volver a intentar tu validación de cliente registrado.`,
             timestamp: new Date().toISOString()
           };
           setChatHistory((prev) => [...prev, failBotMsg]);
@@ -582,11 +824,11 @@ export default function App() {
           };
           setChatHistory((prev) => [...prev, botMsg]);
         } else if (cleaned === "2" || cleaned.includes("reintentar") || cleaned.includes("no") || cleaned.includes("volver")) {
-          setRegistrationState({ step: "waiting_name" });
+          setRegistrationState({ step: "waiting_code" });
           const botMsg: Message = {
             id: `msg-reg-start-${Date.now()}`,
             sender: "agent",
-            text: "De acuerdo, volvamos a intentar tu validación. Por favor escribe tu **Nombre Completo** tal como aparece en tu registro:",
+            text: "De acuerdo, volvamos a intentar tu validación. Por favor, escribe tu **Código de Cliente** de 6 caracteres:",
             timestamp: new Date().toISOString()
           };
           setChatHistory((prev) => [...prev, botMsg]);
@@ -742,12 +984,13 @@ export default function App() {
           setClientType("registrado");
           setRegisteredName(finalName);
           setClientCode(newCode);
+          const isFromPostOnboarding = registrationState.postOnboardingAction === "resubmit_visto_bueno";
           setRegistrationState({ step: "none" });
 
           const botMsg: Message = {
             id: `msg-new-reg-ok-${Date.now()}`,
             sender: "agent",
-            text: `¡Registro de Cliente Exitoso! 🎉\n\nBienvenido a **FIUNVA**, **${finalName}**.\n\nHemos completado tu registro bajo el código de acceso exclusivo de 6 caracteres:\n\n👉 **${newCode}**\n\n* **Nivel de Cliente**: ESTÁNDAR (asignado automáticamente)\n* **Correo Asociado**: ${finalEmail}\n* **Celular de Contacto**: ${finalPhone}\n* **Medio de Contacto Preferido**: ${pref === "celular" ? "📱 Celular" : "✉️ Correo electrónico"}\n\n*(Guarda bien este código de 6 caracteres, es tu clave única para volver a acceder como cliente registrado en el futuro).*`,
+            text: `¡Registro de Cliente Exitoso! 🎉\n\nBienvenido a **FIUNVA**, **${finalName}**.\n\nHemos completado tu registro bajo el código de acceso exclusivo de 6 caracteres:\n\n👉 **${newCode}**\n\n* **Nivel de Cliente**: ESTÁNDAR (asignado automáticamente)\n* **Correo Asociado**: ${finalEmail}\n* **Celular de Contacto**: ${finalPhone}\n* **Medio de Contacto Preferido**: ${pref === "celular" ? "📱 Celular" : "✉️ Correo electrónico"}\n\n*(Guarda bien este código de 6 caracteres, es tu clave única para volver a acceder como cliente registrado en el futuro).*${isFromPostOnboarding ? "\n\n👉 **¡Ya estás identificado!** Como tenías una cotización en proceso, por favor escribe **\"visto bueno\"** o **\"sí\"** para registrar y autorizar tu cotización con tu nuevo perfil de cliente." : ""}`,
             timestamp: new Date().toISOString()
           };
           setChatHistory((prev) => [...prev, botMsg]);
@@ -770,12 +1013,16 @@ export default function App() {
     // Trigger registration wizard if choice clicked
     if (query.trim().toLowerCase() === "soy cliente registrado" || query === "Soy cliente registrado") {
       setIsGenerating(true);
+      setClientType("registrado");
+      setIsPortalOpen(true);
       setTimeout(() => {
-        setRegistrationState({ step: "waiting_name" });
+        setRegistrationState({ step: "waiting_code" });
         const botMsg: Message = {
           id: `msg-reg-start-${Date.now()}`,
           sender: "agent",
-          text: "¡Perfecto, procedamos con tu validación! Por favor escribe tu **Nombre Completo** tal como aparece en tu registro:",
+          text: `¡Excelente! He abierto el Portal de Cliente para ti. Para validar tu acceso de cliente registrado, por favor ingresa tu **Código de Registro** de 6 caracteres o **inicia sesión con Google** directamente en la ventana emergente.
+
+Si prefieres ingresar el código manualmente aquí en el chat, solamente escríbelo directamente.`,
           timestamp: new Date().toISOString()
         };
         setChatHistory((prev) => [...prev, botMsg]);
@@ -868,8 +1115,8 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
     setIsGenerating(true);
     setAgentSteps([
       { agentName: "Atención al Cliente", status: "thinking", output: "Escuchando intenciones..." },
-      { agentName: "Generador de Pedido", status: "idle", output: "Buscando referencias..." },
-      { agentName: "Supervisor Explicador", status: "idle", output: "Tratando compatibilidad..." }
+      { agentName: "Planificador y Cotizador", status: "idle", output: "Buscando referencias..." },
+      { agentName: "Soporte Técnico y Validación", status: "idle", output: "Tratando compatibilidad..." }
     ]);
 
     try {
@@ -878,9 +1125,11 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: query,
+          message: finalQueryForAPI,
           clientProfile: activeProfile,
-          currency: currentCurrency
+          currency: currentCurrency,
+          history: chatHistory,
+          notes: finalNotes
         })
       });
 
@@ -893,6 +1142,42 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
       setIsLocalFallback(!!result.isLocalFallback);
 
       // Stagger steps animation sequence
+      if (result.onlyAgent1) {
+        setTimeout(() => {
+          setAgentSteps([
+            {
+              agentName: "Atención al Cliente",
+              status: "completed",
+              output: `Consulta de Base de Conocimiento Resuelta.`
+            },
+            {
+              agentName: "Planificador y Cotizador",
+              status: "idle",
+              output: `Omitido: No requerido.`
+            },
+            {
+              agentName: "Soporte Técnico y Validación",
+              status: "idle",
+              output: `Omitido: No requerido.`
+            }
+          ]);
+
+          const finalReplyText = results.agent1.clientResponse || "Procesado correctamente.";
+          setChatHistory((prev) => [
+            ...prev,
+            {
+              id: `msg-agn-${Date.now()}`,
+              sender: "agent",
+              text: `${finalReplyText}`,
+              timestamp: new Date().toISOString()
+            }
+          ]);
+
+          setIsGenerating(false);
+        }, 800);
+        return;
+      }
+
       setTimeout(() => {
         setAgentSteps([
           {
@@ -901,11 +1186,11 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
             output: `Mapeado. Intento: "${results.agent1?.intent || 'Pregunta General'}"`
           },
           {
-            agentName: "Generador de Pedido",
+            agentName: "Planificador y Cotizador",
             status: "thinking",
             output: `Efectuando consulta técnica y aplicando reglas de negocio...`
           },
-          { agentName: "Supervisor Explicador", status: "idle", output: "" }
+          { agentName: "Soporte Técnico y Validación", status: "idle", output: "" }
         ]);
 
         setTimeout(() => {
@@ -916,12 +1201,12 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
               output: `Intención: "${results.agent1?.intent || 'Pregunta General'}"`
             },
             {
-              agentName: "Generador de Pedido",
+              agentName: "Planificador y Cotizador",
               status: "completed",
               output: `Verificaciones completadas.`
             },
             {
-              agentName: "Supervisor Explicador",
+              agentName: "Soporte Técnico y Validación",
               status: "thinking",
               output: `Generando síntesis explicativa...`
             }
@@ -930,13 +1215,13 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
           setTimeout(() => {
             setAgentSteps([
               { agentName: "Atención al Cliente", status: "completed", output: "Consulta clasificada" },
-              { agentName: "Generador de Pedido", status: "completed", output: "Análisis experto exitoso" },
-              { agentName: "Supervisor Explicador", status: "completed", output: "Respuesta compilada." }
+              { agentName: "Planificador y Cotizador", status: "completed", output: "Análisis experto exitoso" },
+              { agentName: "Soporte Técnico y Validación", status: "completed", output: "Respuesta compilada." }
             ]);
 
             // Append final agent reply
             const finalReplyText = results.agent1.clientResponse || "Procesado correctamente.";
-            const salesBlock = results.agent3.salesSummary ? `\n\n**${results.agent3.salesSummary}**` : "";
+            const salesBlock = results.agent3.salesSummary ? `\n\n${results.agent3.salesSummary}` : "";
             const ordMessage = result.orderCreated ? `\n\n*Nota del sistema:* Cotización registrada bajo el ID **${result.orderCreated.id}** en estatus pendiente.` : "";
             
             setChatHistory((prev) => [
@@ -961,8 +1246,8 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
       setIsGenerating(false);
       setAgentSteps([
         { agentName: "Atención al Cliente", status: "error", output: "Falla de red." },
-        { agentName: "Generador de Pedido", status: "error", output: "Invocación truncada." },
-        { agentName: "Supervisor Explicador", status: "error", output: "Error." }
+        { agentName: "Planificador y Cotizador", status: "error", output: "Invocación truncada." },
+        { agentName: "Soporte Técnico y Validación", status: "error", output: "Error." }
       ]);
       setChatHistory((prev) => [
         ...prev,
@@ -978,6 +1263,10 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
 
   // Predefined suggestion buttons as exact requested by the user
   const quickQuestions = [
+    {
+      title: "ℹ️ ¿Qué es Fiunva?",
+      text: "¿Qué es Fiunva?"
+    },
     {
       title: "👤 Soy cliente registrado",
       text: "Soy cliente registrado"
@@ -1042,81 +1331,99 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
           
           {/* Simulated current credential card */}
           {activeRole === "client" && (
-            <div className="relative inline-block select-none text-[11px] sm:text-xs">
-              {clientType === "registrado" ? (
-                <div className="flex items-center gap-1 sm:gap-2 px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-bold">
-                  <span className="truncate max-w-[80px] sm:max-w-[150px]">Rol: <strong>{registeredName}</strong></span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setClientType("nuevo");
-                      setRegisteredName("");
-                      setClientCode("");
-                    }}
-                    className="text-[10px] text-red-500 hover:text-red-700 font-bold ml-1 hover:underline cursor-pointer shrink-0"
-                    title="Salir del modo registrado"
-                  >
-                    (Salir)
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1 bg-slate-100/80 dark:bg-slate-900/80 px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-full border border-slate-200/60 dark:border-slate-800 transition shadow-xs text-slate-650 dark:text-slate-300 font-bold">
-                  <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 font-extrabold uppercase shrink-0">Rol:</span>
-                  <select
-                    value={clientType}
-                    onChange={(e) => setClientType(e.target.value as "nuevo" | "integrado")}
-                    className="bg-transparent border-none font-bold text-slate-905 dark:text-slate-100 focus:ring-0 focus:outline-none cursor-pointer p-0 text-[11px] sm:text-xs pr-1"
-                  >
-                    <option className="bg-white dark:bg-[#070c19] text-slate-800 dark:text-slate-200" value="nuevo">Cliente nuevo</option>
-                    <option className="bg-white dark:bg-[#070c19] text-slate-800 dark:text-slate-200" value="integrado">Cliente integrado</option>
-                  </select>
+            <div className="flex items-center gap-2">
+              <div className="relative inline-block select-none text-[11px] sm:text-xs">
+                {clientType === "registrado" ? (
+                  <div className="flex items-center gap-1 sm:gap-2 px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-bold">
+                    <span className="truncate max-w-[80px] sm:max-w-[150px]">Rol: <strong>{registeredName}</strong></span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setClientType("nuevo");
+                        setRegisteredName("");
+                        setClientCode("");
+                      }}
+                      className="text-[10px] text-red-500 hover:text-red-700 font-bold ml-1 hover:underline cursor-pointer shrink-0"
+                      title="Salir del modo registrado"
+                    >
+                      (Salir)
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 bg-slate-100/80 dark:bg-slate-900/80 px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-full border border-slate-200/60 dark:border-slate-800 transition shadow-xs text-slate-650 dark:text-slate-300 font-bold">
+                    <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 font-extrabold uppercase shrink-0">Rol:</span>
+                    <select
+                      value={clientType}
+                      onChange={(e) => {
+                        const val = e.target.value as "nuevo" | "integrado" | "registrado";
+                        if (val === "registrado") {
+                          setClientType("registrado");
+                          setIsPortalOpen(true);
+                        } else {
+                          setClientType(val);
+                        }
+                      }}
+                      className="bg-transparent border-none font-bold text-slate-905 dark:text-slate-100 focus:ring-0 focus:outline-none cursor-pointer p-0 text-[11px] sm:text-xs pr-1"
+                    >
+                      <option className="bg-white dark:bg-[#070c19] text-slate-800 dark:text-slate-205" value="nuevo">Cliente nuevo</option>
+                      <option className="bg-white dark:bg-[#070c19] text-slate-800 dark:text-slate-205" value="integrado">Cliente integrado</option>
+                      <option className="bg-white dark:bg-[#070c19] text-slate-800 dark:text-slate-205" value="registrado">Soy cliente registrado</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Synchronized Google Identity Indicator */}
+              {sessionEmail && sessionEmail !== "a23110162@ceti.mx" && (
+                <div className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-slate-100/90 dark:bg-slate-900/90 border border-slate-200/60 dark:border-slate-800 text-[10.5px] font-bold text-slate-600 dark:text-slate-400">
+                  <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                  <span className="truncate max-w-[80px]" title={sessionEmail}>{sessionEmail.split("@")[0]}</span>
                 </div>
               )}
+
+              {/* Portal / Registrarse Button Trigger */}
+              <button
+                onClick={() => setIsPortalOpen(true)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border text-[11px] sm:text-xs font-bold transition select-none transform active:scale-95 cursor-pointer shadow-xs ${
+                  clientType === "registrado"
+                    ? "bg-blue-500/10 hover:bg-blue-500/20 border-blue-500/20 text-blue-700 dark:text-blue-400"
+                    : "bg-blue-600 hover:bg-blue-700 text-white border-transparent shadow-sm"
+                }`}
+              >
+                <User className="w-3.5 h-3.5 shrink-0" />
+                <span>Portal Cliente</span>
+              </button>
             </div>
           )}
 
           {activeRole === "admin" && (
-            <div className="flex items-center gap-1 sm:gap-1.5 bg-amber-500/10 px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-full border border-amber-500/20 text-[10px] sm:text-xs text-amber-700 dark:text-amber-400 font-extrabold shadow-xs">
-              <Cpu className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate max-w-[100px] sm:max-w-none">ZONA TÉCNICA</span>
-            </div>
-          )}
+            <div className="flex items-center gap-2 select-none">
+              <div className="flex items-center gap-1 sm:gap-1.5 bg-amber-500/10 px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-full border border-amber-500/20 text-[10px] sm:text-xs text-amber-700 dark:text-amber-400 font-extrabold shadow-xs">
+                <Cpu className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate max-w-[100px] sm:max-w-none">ZONA TÉCNICA</span>
+              </div>
 
-          {/* Active Google Authentication session control */}
-          {sessionEmail ? (
-            <div className="flex items-center gap-2 bg-slate-150/90 dark:bg-slate-900/90 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border border-slate-200/60 dark:border-slate-800 transition shadow-xs text-xs font-bold text-slate-700 dark:text-slate-300">
-              <User className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-              <span className="truncate max-w-[120px] sm:max-w-[180px] text-slate-800 dark:text-slate-100" title={sessionEmail}>
-                {sessionEmail}
-              </span>
-              <button
-                onClick={async () => {
-                  try {
-                    await signOut(auth);
-                  } catch (err) {
-                    console.error("Error al cerrar sesión:", err);
-                  }
-                }}
-                className="text-[10px] text-red-500 hover:text-red-700 hover:underline cursor-pointer transition font-bold shrink-0 ml-1.5 border-l border-slate-300 dark:border-slate-700 pl-1.5"
-              >
-                Salir
-              </button>
+              {sessionEmail === "a23110162@ceti.mx" && (
+                <div className="flex items-center gap-1.5 bg-slate-100/90 dark:bg-slate-900/90 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border border-slate-200/60 dark:border-slate-800 transition shadow-xs text-xs font-bold text-slate-700 dark:text-slate-300">
+                  <User className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                  <span className="truncate max-w-[120px] sm:max-w-[180px] text-slate-800 dark:text-slate-100">
+                    Administrador
+                  </span>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await signOut(auth);
+                      } catch (err) {
+                        console.error("Error al cerrar sesión:", err);
+                      }
+                    }}
+                    className="text-[10px] text-red-500 hover:text-red-700 hover:underline cursor-pointer transition font-bold shrink-0 ml-1.5 border-l border-slate-300 dark:border-slate-700 pl-1.5"
+                  >
+                    Salir
+                  </button>
+                </div>
+              )}
             </div>
-          ) : (
-            <button
-              onClick={async () => {
-                try {
-                  const provider = new GoogleAuthProvider();
-                  await signInWithPopup(auth, provider);
-                } catch (err: any) {
-                  console.error("Error al iniciar sesión con Google:", err);
-                }
-              }}
-              className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold select-none text-[11px] sm:text-xs px-3.5 py-2 sm:px-4 sm:py-2 rounded-xl shadow-md transform active:scale-95 transition cursor-pointer"
-            >
-              <UserPlus className="w-3.5 h-3.5 shrink-0" />
-              <span>Ingresar con Google</span>
-            </button>
           )}
 
           {/* Theme Toggle Button - Rounded-full Circle */}
@@ -1190,9 +1497,7 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
                       </div>
                       {/* Text body and info */}
                       <div className="flex-1 flex flex-col gap-2">
-                        <div className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line font-medium font-sans">
-                          {msg.text}
-                        </div>
+                        <FormattedMessage text={msg.text} />
                         
                         {/* Timestamp */}
                         <div className="text-[9px] text-slate-450 dark:text-slate-500 font-bold font-mono">
@@ -1289,6 +1594,7 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
                       else if (p.text.includes("ofrecen")) IconComponent = Layers;
                       else if (p.text.includes("cotizar")) IconComponent = DollarSign;
                       else if (p.text.includes("estatus")) IconComponent = Search;
+                      else if (p.text.toLowerCase().includes("fiunva")) IconComponent = HelpCircle;
 
                       return (
                         <button
@@ -1415,7 +1721,9 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
                 products={products}
                 orders={orders}
                 users={usersList}
+                knowledgeBase={knowledgeBase}
                 onResetDatabase={handleResetDatabase}
+                onImportDatabase={handleImportDatabase}
                 isResetting={isResetting}
               />
             )}
@@ -1433,6 +1741,39 @@ Para proceder, **por favor selecciona o indica en cuál de las 3 monedas deseas 
           </div>
         </div>
       </footer>
+
+      {/* 4. CLIENT REGISTRATION AND SIGN-IN ACCESS PORTAL */}
+      <ClientPortalModal
+        isOpen={isPortalOpen}
+        onClose={() => setIsPortalOpen(false)}
+        usersList={usersList}
+        sessionEmail={sessionEmail}
+        onSaveUser={handleSaveUser}
+        clientType={clientType}
+        registeredName={registeredName}
+        clientCode={clientCode}
+        onSelectClientProfile={(type, name, code) => {
+          setClientType(type);
+          setRegisteredName(name);
+          setClientCode(code);
+        }}
+        onGoogleSignIn={async () => {
+          try {
+            const provider = new GoogleAuthProvider();
+            await signInWithPopup(auth, provider);
+          } catch (err) {
+            console.error("Error signing in with Google:", err);
+            throw err;
+          }
+        }}
+        onGoogleSignOut={async () => {
+          try {
+            await signOut(auth);
+          } catch (err) {
+            console.error("Error signing out of Google:", err);
+          }
+        }}
+      />
     </div>
   );
 }

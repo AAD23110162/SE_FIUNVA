@@ -13,7 +13,8 @@ import {
   MessageSquare, 
   Cpu, 
   Activity, 
-  ExternalLink 
+  ExternalLink,
+  Trash2
 } from "lucide-react";
 import { Order, Product } from "../types";
 
@@ -22,9 +23,12 @@ interface OrderQueueProps {
   products: Product[];
   onApproveOrder: (orderId: string) => Promise<void>;
   onRejectOrder: (orderId: string) => Promise<void>;
+  onDeleteOrder: (orderId: string) => Promise<void>;
   currentCurrency?: "USD" | "MXN" | "EUR";
   exchangeRates?: Record<"USD" | "MXN" | "EUR", number>;
   formatBasePrice?: (priceInUSD: number) => string;
+  externalSelectedOrderId?: string | null;
+  onExternalSelectedOrderIdChange?: (orderId: string | null) => void;
 }
 
 type AgentTab = "agent1" | "agent2" | "agent3" | "full_trace";
@@ -34,14 +38,43 @@ export default function OrderQueue({
   products,
   onApproveOrder,
   onRejectOrder,
+  onDeleteOrder,
   currentCurrency = "USD",
   exchangeRates = { USD: 1, MXN: 17.50, EUR: 0.92 },
-  formatBasePrice = (price) => `$${price.toFixed(2)} USD`
+  formatBasePrice = (price) => `$${price.toFixed(2)} USD`,
+  externalSelectedOrderId,
+  onExternalSelectedOrderIdChange
 }: OrderQueueProps) {
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(orders[0]?.id || null);
+  const [localSelectedOrderId, setLocalSelectedOrderId] = useState<string | null>(orders[0]?.id || null);
   const [activeStatusTab, setActiveStatusTab] = useState<"pending" | "approved" | "rejected">("pending");
   const [activeAgentTab, setActiveAgentTab] = useState<AgentTab>("agent2"); // Start on Agent 2 as they run the web search
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  const selectedOrderId = externalSelectedOrderId !== undefined ? externalSelectedOrderId : localSelectedOrderId;
+  const setSelectedOrderId = (id: string | null) => {
+    if (onExternalSelectedOrderIdChange) {
+      onExternalSelectedOrderIdChange(id);
+    } else {
+      setLocalSelectedOrderId(id);
+    }
+  };
+
+  // Switch tab if external selection changes
+  React.useEffect(() => {
+    if (externalSelectedOrderId) {
+      const order = orders.find(o => o.id === externalSelectedOrderId);
+      if (order) {
+        if (order.status === "pending_approval") {
+          setActiveStatusTab("pending");
+        } else if (order.status === "approved") {
+          setActiveStatusTab("approved");
+        } else {
+          setActiveStatusTab("rejected");
+        }
+      }
+    }
+  }, [externalSelectedOrderId, orders]);
 
   // Filter orders by selected status tab
   const filteredOrders = orders.filter((o) => {
@@ -70,7 +103,7 @@ export default function OrderQueue({
       setErrorMessage(null);
       await onApproveOrder(orderId);
     } catch (err: any) {
-      setErrorMessage(err.message || "Falla en la aprobación de stock.");
+      setErrorMessage(err.message || "Falla en la aprobación de la cotización.");
     }
   };
 
@@ -280,6 +313,13 @@ export default function OrderQueue({
                       <span>{formatBasePrice(selectedOrder.total)}</span>
                     </div>
                   </div>
+
+                  {selectedOrder.notes && (
+                    <div className="mt-3 bg-amber-500/5 text-amber-900 dark:text-amber-305 dark:bg-amber-500/10 p-3 rounded-lg border border-amber-500/15 text-xs text-left">
+                      <span className="font-bold uppercase text-[9px] tracking-wider block text-amber-600 dark:text-amber-400 mb-1 select-none">📝 Observación Extra de la Solicitud:</span>
+                      <p className="italic font-sans">"{selectedOrder.notes}"</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Sub-Header: Active Agent steps display */}
@@ -455,33 +495,60 @@ export default function OrderQueue({
 
               {/* Transactions actions controls */}
               {selectedOrder.status === "pending_approval" && (
-                <div className="flex items-center justify-end gap-3 border-t border-slate-100 dark:border-slate-850 pt-4 mt-4 select-none">
+                <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-850 pt-4 mt-4 select-none">
                   <button
-                    onClick={() => handleReject(selectedOrder.id)}
-                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-rose-700 hover:text-white hover:bg-rose-600 rounded-xl border border-rose-300 dark:border-rose-900 transition cursor-pointer"
+                    onClick={() => setDeleteConfirmId(selectedOrder.id)}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-red-650 dark:text-red-400 hover:text-white hover:bg-red-600 rounded-xl border border-red-300 dark:border-red-900 transition cursor-pointer"
                   >
-                    <X className="w-4 h-4" />
-                    Rechazar
+                    <Trash2 className="w-4 h-4" />
+                    Eliminar
                   </button>
-                  <button
-                    onClick={() => handleApprove(selectedOrder.id)}
-                    className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md hover:shadow-lg transition cursor-pointer"
-                  >
-                    <Check className="w-4 h-4" />
-                    Autorizar y Despachar
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => handleReject(selectedOrder.id)}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-rose-700 hover:text-white hover:bg-rose-600 rounded-xl border border-rose-300 dark:border-rose-900 transition cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                      Rechazar
+                    </button>
+                    <button
+                      onClick={() => handleApprove(selectedOrder.id)}
+                      className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md hover:shadow-lg transition cursor-pointer"
+                    >
+                      <Check className="w-4 h-4" />
+                      Autorizar y Despachar
+                    </button>
+                  </div>
                 </div>
               )}
 
               {selectedOrder.status === "approved" && (
-                <div className="text-right text-xs text-emerald-600 dark:text-emerald-450 font-bold border-t border-slate-100 dark:border-slate-850 pt-3 mt-4 select-none">
-                  ✓ Venta autorizada y despachada. Bodega central disminuyó las existencias físicas de componentes.
+                <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-850 pt-3 mt-4 select-none">
+                  <div className="text-left text-xs text-emerald-600 dark:text-emerald-450 font-bold">
+                    ✓ Venta autorizada y despachada. Bodega central disminuyó las existencias físicas de componentes.
+                  </div>
+                  <button
+                    onClick={() => setDeleteConfirmId(selectedOrder.id)}
+                    className="flex items-center gap-1 px-3 py-1.5 hover:bg-red-600 hover:text-white text-xs font-bold text-red-550 dark:text-red-400 border border-red-200 dark:border-red-900 rounded-xl transition cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                    Eliminar
+                  </button>
                 </div>
               )}
 
               {selectedOrder.status === "rejected" && (
-                <div className="text-right text-xs text-rose-600 dark:text-rose-450 font-bold border-t border-slate-100 dark:border-slate-850 pt-3 mt-4 select-none">
-                  ✗ Esta propuesta técnica de cotización fue rechazada y archivada.
+                <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-850 pt-3 mt-4 select-none">
+                  <div className="text-left text-xs text-rose-600 dark:text-rose-450 font-bold">
+                    ✗ Esta propuesta técnica de cotización fue rechazada y archivada.
+                  </div>
+                  <button
+                    onClick={() => setDeleteConfirmId(selectedOrder.id)}
+                    className="flex items-center gap-1 px-3 py-1.5 hover:bg-red-600 hover:text-white text-xs font-bold text-red-550 dark:text-red-400 border border-red-200 dark:border-red-900 rounded-xl transition cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                    Eliminar
+                  </button>
                 </div>
               )}
 
@@ -495,6 +562,59 @@ export default function OrderQueue({
         </div>
 
       </div>
+
+      {/* CONFIRMATION MODAL FOR DELETIONS */}
+      {deleteConfirmId && (
+        <div id="delete-order-confirmation-modal" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-2xl relative">
+            <div className="flex items-center gap-3 text-rose-600 mb-4">
+              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-950 dark:text-slate-50 text-base">¿Estás seguro de eliminar este pedido?</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{deleteConfirmId}</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-450 leading-relaxed mb-6">
+              Esta acción es **irreversible**. El pedido e histórico de orquestación serán eliminados definitivamente de la base de datos central de Firestore y de la cola del servidor.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 select-none">
+              <button
+                onClick={() => setDeleteConfirmId(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  if (!deleteConfirmId) return;
+                  try {
+                    setErrorMessage(null);
+                    await onDeleteOrder(deleteConfirmId);
+                    const remainingFiltered = filteredOrders.filter(o => o.id !== deleteConfirmId);
+                    if (remainingFiltered.length > 0) {
+                      setSelectedOrderId(remainingFiltered[0].id);
+                    } else {
+                      setSelectedOrderId(null);
+                    }
+                    setDeleteConfirmId(null);
+                  } catch (err: any) {
+                    setErrorMessage(err.message || "Error al eliminar el pedido.");
+                    setDeleteConfirmId(null);
+                  }
+                }}
+                className="px-5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-md hover:shadow-lg transition cursor-pointer"
+              >
+                Aceptar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

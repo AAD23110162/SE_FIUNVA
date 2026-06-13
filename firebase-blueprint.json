@@ -26,6 +26,15 @@
           "type": "string",
           "enum": ["standard", "frequent", "vip"],
           "description": "Nivel de descuento preferencial asignado al cliente."
+        },
+        "phone": {
+          "type": "string",
+          "description": "Número de celular de contacto activo de 10 dígitos o formato libre."
+        },
+        "preferredContact": {
+          "type": "string",
+          "enum": ["celular", "correo"],
+          "description": "Medio de contacto preferido para presupuestos o entrega de pedidos."
         }
       },
       "required": ["uid", "name", "email", "role", "clientTier"]
@@ -107,6 +116,30 @@
         }
       },
       "required": ["id", "clientId", "clientName", "clientTier", "subtotal", "total", "status", "createdAt"]
+    },
+    "KnowledgeEntry": {
+      "title": "Entrada de Base de Conocimiento",
+      "description": "Respuestas autorizadas y directrices corporativas para consultas informativas resueltas por el Agente de Atención al Cliente.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "question": {
+          "type": "string"
+        },
+        "answer": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "question", "answer"]
     }
   },
   "firestore": {
@@ -121,6 +154,10 @@
     "/orders/{orderId}": {
       "schema": "Order",
       "description": "Historial y cola de validaciones de órdenes generadas por los agentes."
+    },
+    "/knowledge_base/{entryId}": {
+      "schema": "KnowledgeEntry",
+      "description": "Manuales, preguntas frecuentes y conocimiento autorizado del sistema experto."
     }
   }
 }

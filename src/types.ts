@@ -11,6 +11,8 @@ export interface UserProfile {
   email: string;
   role: UserRole;
   clientTier: "standard" | "frequent" | "vip";
+  phone?: string;
+  preferredContact?: "celular" | "correo";
 }
 
 export interface Product {
@@ -48,6 +50,7 @@ export interface Order {
   total: number;
   status: "pending_approval" | "approved" | "rejected";
   createdAt: string;
+  notes?: string;
   agentInferences: {
     stockWarnings: string[];
     discountsApplied: string[];
@@ -69,7 +72,7 @@ export interface Message {
 }
 
 export interface AgentStep {
-  agentName: "Atención al Cliente" | "Generador de Pedido" | "Supervisor Explicador";
+  agentName: "Atención al Cliente" | "Generador de Pedido" | "Supervisor Explicador" | "Planificador y Cotizador" | "Soporte Técnico y Validación";
   status: "idle" | "thinking" | "completed" | "error";
   output: string;
   details?: Record<string, any>;
@@ -80,4 +83,12 @@ export interface SystemMetrics {
   approvedOrders: number;
   pendingValidation: number;
   totalCalculatedValue: number;
+}
+
+export interface KnowledgeEntry {
+  id: string;
+  question: string;
+  answer: string;
+  category: string;
+  updatedAt: string;
 }

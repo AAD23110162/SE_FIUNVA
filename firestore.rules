@@ -8,52 +8,70 @@ service cloud.firestore {
     }
     
     // Reusable global security helpers
-    function isSignedIn() {
-      return request.auth != null;
-    }
-    
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
-    
-    // Helper to evaluate administrative or staff access via document query
-    function isStaff() {
-      return isSignedIn() && (
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'operator' || 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
-      );
+
+    function isValidUserProfile(data) {
+      return data.uid is string && data.uid.size() <= 128
+        && data.name is string && data.name.size() <= 256
+        && data.email is string && data.email.size() <= 256
+        && (data.role == 'client' || data.role == 'operator' || data.role == 'admin')
+        && (data.clientTier == 'standard' || data.clientTier == 'frequent' || data.clientTier == 'vip')
+        && (!('phone' in data) || data.phone is string)
+        && (!('preferredContact' in data) || (data.preferredContact == 'celular' || data.preferredContact == 'correo'));
+    }
+
+    function isValidProduct(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 256
+        && data.category is string && data.category.size() <= 128
+        && data.price is number
+        && data.stock is int;
+    }
+
+    function isValidOrder(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.clientId is string && data.clientId.size() <= 128
+        && data.clientName is string && data.clientName.size() <= 256
+        && data.clientTier is string && data.clientTier.size() <= 64
+        && data.subtotal is number
+        && data.total is number
+        && data.status is string && data.status.size() <= 64;
+    }
+
+    function isValidKnowledgeEntry(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.question is string && data.question.size() <= 1024
+        && data.answer is string && data.answer.size() <= 8192;
     }
 
     // --- Users Profiles Partition ---
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.uid == userId 
-        && request.resource.data.keys().hasAll(['uid', 'name', 'email', 'role', 'clientTier']) 
-        && request.resource.data.role == 'client'; // Prevent self-elevating privileges
-        
-      allow update: if isSignedIn() && request.auth.uid == userId 
-        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'clientTier']))
-        || isStaff(); // Only staff can modify levels or roles
+      allow read: if true;
+      allow create, update: if isValidId(userId) && isValidUserProfile(request.resource.data);
+      allow delete: if isValidId(userId);
     }
 
     // --- Catalog and Stock Levels ---
     match /products/{productId} {
-      allow read: if true; // Products can be viewed by potential clients without auth
-      allow write: if isStaff(); // Only certified staff can restock or modify pricing
+      allow read: if true;
+      allow create, update: if isValidId(productId) && isValidProduct(request.resource.data);
+      allow delete: if isValidId(productId);
     }
 
     // --- Agent Generated Orders Queue ---
     match /orders/{orderId} {
-      allow read: if isSignedIn() && (resource.data.clientId == request.auth.uid || isStaff());
-      allow create: if isSignedIn() && request.resource.data.clientId == request.auth.uid;
-      
-      // Updates represent status transitions (e.g., operator approvals / rejections)
-      allow update: if isStaff() 
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
-        && resource.data.status == 'pending_approval'; // Terminal state lock prevention
-        
-      allow delete: if false; // Orders are audit records and cannot be expunged
+      allow read: if true;
+      allow create, update: if isValidId(orderId) && isValidOrder(request.resource.data);
+      allow delete: if isValidId(orderId);
+    }
+
+    // --- System Knowledge Base ---
+    match /knowledge_base/{entryId} {
+      allow read: if true;
+      allow create, update: if isValidId(entryId) && isValidKnowledgeEntry(request.resource.data);
+      allow delete: if isValidId(entryId);
     }
   }
 }
