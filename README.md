@@ -1,58 +1,34 @@
-**SE-FIUNVA — Sistema Experto FIUNVA**
+# **SE-FIUNVA — Sistema Experto FIUNVA**
 
-**Resumen:**
+---
+
+## 📋 **Tabla de Contenidos**
+
+### 🎯 Conceptos y Contexto
+- [Resumen y Objetivo](#resumen)
+- [Implementación de Firebase y Firestore](#implementación-de-firebase-y-firestore-en-se-fiunva)
+- [Estructura del Sistema Experto](#estructura-fundamental-del-sistema-experto-se-fiunva)
+
+### 📖 Manual de Usuario
+- [1. Instalar el Sistema](#1-instalar-el-sistema)
+- [2. Configurar Dependencias](#2-configurar-dependencias)
+- [3. Ejecutar los Agentes](#3-ejecutar-los-agentes)
+- [4. Conectar la Base de Datos](#4-conectar-la-base-de-datos)
+- [5. Ejecutar Inferencias](#5-ejecutar-inferencias)
+- [6. Utilizar Correctamente el Sistema](#6-utilizar-correctamente-el-sistema)
+
+### 🆘 Troubleshooting y Referencia
+- [Solución de Problemas Comunes](#troubleshooting-solución-de-problemas-comunes)
+- [Comandos Útiles](#comandos-útiles-de-referencia-rápida)
+
+### ⚙️ Especificaciones Técnicas
+- [Definición y Tareas de Agentes](#definición-y-tareas-de-agentes)
+
+---
+
+## **Resumen**
+
 - **Objetivo:** Desarrollar un sistema experto moderno basado en agentes inteligentes capaces de interactuar con clientes, realizar inferencias y automatizar procesos de venta o soporte mediante IA para proyectos de electrónica, software y robótica.
-
-**Concepto de Marca:**
-- **Nombre formal:** SE-FIUNVA, abreviatura de Sistema Experto FIUNVA.
-- **Juego conceptual:** El nombre se puede leer como “se FIUNVA”, reforzando la idea de que la plataforma no solo representa a la marca, sino que también se expresa como una acción: FIUNVA se activa, atiende, infiere y propone.
-- **Intención del naming:** Crear una identidad técnica y recordable que conecte con consultoría tecnológica, ingeniería y automatización, evitando que el proyecto se perciba como un chatbot genérico.
-
-**Propuesta Evolutiva del Proyecto:**
-- **Nombre:** FIUNVA Nexus o FIUNVA Expert System (FES).
-- **Enfoque:** No limitar el sistema a un chatbot comercial. La propuesta debe convertirse en una plataforma de valor real para FIUNVA, capaz de atender clientes de ingeniería, cotizar, generar propuestas técnicas, gestionar proyectos, dar soporte postventa y explicar decisiones e inferencias.
-- **Beneficio principal:** El proyecto académico queda alineado con una herramienta reutilizable por la marca.
-
-**Alcance e Integraciones:**
-- **Incluye:** Ingeniería del conocimiento, sistemas expertos, motores de inferencia, bases de datos, agentes inteligentes, IA moderna, explicabilidad del razonamiento y arquitectura cliente-servidor o local.
-
-**Requerimientos Generales:**
-- **Ejecución local:** El proyecto debe poder ejecutarse de forma LOCAL en una computadora personal.
-- **Herramientas permitidas (ejemplos):** Python, FastAPI, Flask, Streamlit, Gradio, SQLite, MongoDB Atlas, Supabase, Ollama, LangChain, CrewAI, OpenRouter, HuggingFace, Gemini API.
-
-**Arquitectura Recomendada:**
-- **Descripción:** Sistema multi-agente con al menos 3 agentes colaborando entre sí y una base de datos central para persistencia.
-- **Agentes mínimos obligatorios:**
-  - **Agente 1 — Atención al Cliente:**
-    - **Funcionalidad:** Leer mensajes de clientes, detectar intención, extraer información relevante y responder automáticamente.
-    - **Ejemplo:** Cliente: “Hola, necesito 3 motores NEMA17 y 2 drivers.” → El agente debe interpretar cantidad, producto y posibles aclaraciones.
-
-  - **Agente 2 — Generador de Pedido:**
-    - **Funcionalidad:** Procesar la información recibida, validar datos, realizar inferencias (reglas), generar el pedido y guardar en la base de datos.
-    - **Ejemplo de regla:** IF stock < cantidad_solicitada THEN sugerir reabastecimiento.
-
-  - **Agente 3 — Supervisor / Explicador:**
-    - **Funcionalidad:** Generar resumen de la venta, explicar decisiones e inferencias realizadas y solicitar validación final al usuario o operador.
-    - **Ejemplo:** “Se detectó que el cliente solicitó 3 motores NEMA17. Existe stock suficiente. Se aplicó descuento por cliente frecuente.”
-
-- **Arquitectura ampliada recomendada para FIUNVA:**
-  - **Frontend:** React Web App con Firebase Hosting y Firebase Auth.
-  - **Backend:** Firebase Functions con lógica de negocio y orquestación de agentes.
-  - **IA:** Gemini 2.5 Flash para atención y clasificación; Gemini 2.5 Pro para propuestas complejas y análisis avanzado.
-  - **Persistencia:** Firestore como base de datos principal.
-  - **RAG:** Firestore + embeddings + vector search para consultar proyectos previos, documentación FIUNVA, plantillas y procedimientos.
-  - **Flujo general:** Cliente -> React Web App -> Firebase Hosting -> Firebase Functions -> Agentes -> Gemini -> Firestore.
-
-**Tema del Proyecto:**
-- **Áreas sugeridas (no limitadas):** Ventas, diagnóstico, atención al cliente, soporte técnico, mantenimiento, medicina, automatización, educación, robótica, electrónica, mecatrónica.
-
-**Plataformas de Integración:**
-- Telegram, WhatsApp, Instagram, Facebook Messenger, Discord, página web con chatbot, aplicación Android/iOS.
-
-**Base de Datos:**
-- **Requisito:** El sistema DEBE conectarse a una base de datos.
-- **Opciones sugeridas:** SQLite, PostgreSQL, MongoDB, Firebase, Supabase.
-- **Fuentes de datos permitidas:** Datasets descargados, HuggingFace, Kaggle.
 
 **Base de Conocimiento FIUNVA:**
 - El sistema debe conocer, como mínimo, los siguientes dominios de conocimiento:
@@ -145,7 +121,7 @@
 - **IA / Razonamiento:** Gemini 2.5 Flash y Gemini 2.5 Pro, con apoyo de LangChain si se requiere orquestación híbrida.
 - **Motor de inferencia:** Reglas explícitas almacenadas en Firestore y aplicadas por un agente especializado.
 
-**Implementación de Firebase y Firestore en SE-FIUNVA:**
+## **Implementación de Firebase y Firestore en SE-FIUNVA**
 
 Firebase es la plataforma cloud que se utiliza como soporte de infraestructura para el prototipo y la futura versión productiva del sistema. En SE-FIUNVA sirve como capa de autenticación, alojamiento web, funciones backend y conexión con la base de datos central.
 
@@ -398,7 +374,7 @@ Customer      Inference      Proposal      Supervisor
 
 
 
-**Estructura fundamental del Sistema Experto SE-FIUNVA**
+## **Estructura fundamental del Sistema Experto SE-FIUNVA**
 
 El Sistema Experto FIUNVA está construido sobre cuatro pilares arquitectónicos que trabajan en conjunto para procesar solicitudes técnicas y generar recomendaciones de ingeniería de forma automatizada. A continuación se describe cada componente y su rol en el flujo de inferencia.
 
@@ -464,9 +440,504 @@ La interfaz actúa como el puente bidireccional que permite la interacción flui
 - Retroalimentación activa: los operadores pueden rechazar propuestas y el sistema aprende de ello para futuras interacciones.
 - Visualización de colecciones Firestore en tiempo real: `products`, `orders`, `users`, `rules`.
 
+---
 
+## **Manual de Usuario SE-FIUNVA: Guía Práctica para Instalar, Configurar y Usar el Sistema**
 
-**Definición y tareas de agentes**
+Este manual está diseñado para que cualquier usuario pueda clonar el repositorio, configurar el entorno local y usar el sistema experto desde cero. Incluye instrucciones paso a paso, ejemplos prácticos y soluciones a problemas comunes.
+
+---
+
+### **1. Instalar el Sistema**
+
+#### **Requisitos previos**
+Asegúrate de tener instalados en tu computadora:
+- **Node.js 18 o superior**: Descarga desde [nodejs.org](https://nodejs.org)
+- **npm** (incluido con Node.js)
+- **Git**: Descarga desde [git-scm.com](https://git-scm.com)
+
+#### **Pasos de instalación**
+
+1. **Clonar el repositorio**
+   ```bash
+   git clone https://github.com/AAD23110162/SE_FIUNVA.git
+   cd SE_FIUNVA
+   ```
+
+2. **Verificar la estructura del proyecto**
+   ```bash
+   ls -la
+   ```
+   Deberías ver carpetas como `src/`, `Imagenes/`, archivos como `package.json`, `server.ts`, `README.md`, etc.
+
+3. **Instalar dependencias**
+   ```bash
+   npm install
+   ```
+   Este comando descarga todas las librerías necesarias (React, Express, Firebase, Gemini API, etc.) en la carpeta `node_modules/`.
+
+4. **Verificación final**
+   ```bash
+   npm run lint
+   ```
+   Si la verificación es exitosa, verás un mensaje sin errores. El sistema está listo para configurar.
+
+---
+
+### **2. Configurar Dependencias**
+
+#### **Configuración básica de variables de entorno**
+
+1. **Copiar el archivo de ejemplo**
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Editar el archivo `.env`** (con un editor de texto como VS Code o nano)
+   ```
+   GEMINI_API_KEY="MY_GEMINI_API_KEY"
+   APP_URL="MY_APP_URL"
+   ```
+
+   - **GEMINI_API_KEY** (Opcional pero recomendado): Obtén una clave API desde [Google AI Studio](https://aistudio.google.com/apikey). Sin ella, el sistema funcionará con un motor de inferencia local fallback.
+   - **APP_URL** (Opcional): Por defecto es `http://localhost:3000` en desarrollo local.
+
+#### **Configuración de Firebase (Opcional pero recomendado para persistencia)**
+
+Si deseas que los datos se guarden en la nube (en lugar de solo en memoria local):
+
+1. **Crear un proyecto en Firebase**
+   - Ve a [Firebase Console](https://console.firebase.google.com)
+   - Haz clic en "Crear proyecto"
+   - Rellena el nombre del proyecto (ej: "SE-FIUNVA-LOCAL")
+   - Acepta los términos y crea el proyecto
+
+2. **Crear una aplicación web**
+   - En la consola de Firebase, selecciona tu proyecto
+   - Haz clic en "Configuración del proyecto" (rueda dentada)
+   - Ve a la pestaña "Aplicaciones"
+   - Haz clic en el icono web (`</>`), nómbrala (ej: "SE-FIUNVA Web") y registra
+
+3. **Copiar la configuración**
+   - Firebase mostrará un bloque de código con tu configuración
+   - Copia los valores: `apiKey`, `authDomain`, `projectId`, `storageBucket`, `messagingSenderId`, `appId`
+
+4. **Crear archivo de configuración local**
+   ```bash
+   nano firebase-applet-config.json
+   ```
+   Pega el siguiente contenido, reemplazando los valores con los tuyos:
+   ```json
+   {
+     "firebase": {
+       "apiKey": "TU_API_KEY_AQUI",
+       "authDomain": "tu-proyecto.firebaseapp.com",
+       "projectId": "tu-proyecto",
+       "storageBucket": "tu-proyecto.appspot.com",
+       "messagingSenderId": "TU_SENDER_ID",
+       "appId": "TU_APP_ID"
+     }
+   }
+   ```
+   Guarda el archivo con `Ctrl+X` (en nano), luego `Y` y `Enter`.
+
+5. **Habilitar Firestore**
+   - En la consola de Firebase, ve a "Firestore Database"
+   - Haz clic en "Crear base de datos"
+   - Selecciona "Iniciar en modo prueba" (para desarrollo local)
+   - Selecciona tu región más cercana y crea
+
+6. **Habilitar Authentication**
+   - En la consola, ve a "Authentication"
+   - Haz clic en "Comenzar"
+   - Activa "Google" como proveedor
+
+#### **Confirmación de configuración**
+
+Inicia el servidor para verificar que todo está configurado correctamente:
+```bash
+npm run dev
+```
+
+Si ves mensajes como "Firestore successfully connected" o "Operating with in-memory database fallback", la configuración es correcta.
+
+---
+
+### **3. Ejecutar los Agentes**
+
+#### **Iniciar el servidor de desarrollo**
+
+1. **Arranca el servidor**
+   ```bash
+   npm run dev
+   ```
+
+2. **Abre tu navegador**
+   - Ve a `http://localhost:3000`
+   - Deberías ver la interfaz web de SE-FIUNVA
+
+3. **Entender lo que ves**
+   - **Chat de cliente (vista por defecto):** Un área de chat donde puedes escribir solicitudes
+   - **Flujo de Agentes (derecha o abajo):** Tres columnas que muestran el estado de cada agente
+     - **Agente 1 (Atención al Cliente):** Interpreta tu mensaje y extrae intención
+     - **Agente 2 (Planificador y Cotizador):** Valida disponibilidad y calcula precios
+     - **Agente 3 (Supervisor Explicador):** Verifica y explica la propuesta final
+
+#### **Enviar tu primer mensaje**
+
+1. En el campo de chat, escribe un mensaje como:
+   ```
+   Quiero 3 motores NEMA17 y 2 drivers DRV8825 para un robot
+   ```
+
+2. Presiona "Enviar"
+
+3. Observa cómo:
+   - El **Agente 1** detecta que solicitas motores y drivers
+   - El **Agente 2** busca esos productos en el catálogo, valida stock y calcula el total
+   - El **Agente 3** genera un resumen y explica las reglas aplicadas (ej: "Se detectó compatibilidad obligatoria motor-driver")
+
+---
+
+### **4. Conectar la Base de Datos**
+
+#### **Verificar que la BD está conectada**
+
+1. **Sin Firebase (modo local)**
+   - Los datos se guardan en memoria durante la sesión
+   - Si reinicias el servidor, los datos se pierden
+   - Mensajes en consola: "Operating with in-memory database fallback"
+
+2. **Con Firebase (modo persistente)**
+   - Los datos se guardan en Firestore en tiempo real
+   - Si reinicias, los datos permanecen
+   - Mensajes en consola: "Firestore successfully connected" y logs de sincronización
+
+#### **Acceder a las colecciones de la BD (Modo Administrador)**
+
+1. **Cambiar a vista de Administrador**
+   - Si tienes el email `a23110162@ceti.mx`, haz clic en "Cambiar a Administrador" en el header (si no lo ves, requiere autenticación Google)
+   - Alternativamente, puedes cambiar el email en el código de [src/App.tsx](src/App.tsx) línea ~120 para pruebas locales
+
+2. **Ver las colecciones**
+   - Ve a la pestaña "Colecciones" en la vista de Administrador
+   - Haz clic en "Explorador de Firestore Activo"
+   - Verás cuatro tabs: `users`, `products`, `orders`, `knowledge_base`
+
+3. **Respaldar la BD (Descargar JSON)**
+   - En la consola de Administrador, haz clic en "Descargar JSON"
+   - Se descargará un archivo `snapshot_fiunva_firestore_AAAA-MM-DD.json` con todos los datos
+
+4. **Restaurar la BD (Cargar JSON)**
+   - En la consola de Administrador, haz clic en "Cargar JSON"
+   - Selecciona un archivo JSON previamente descargado
+   - Los datos se importarán y sincronizarán con Firestore
+
+5. **Resetear la BD**
+   - En la consola de Administrador, haz clic en "Restablecer DB"
+   - La base de datos se reinicializará con datos por defecto
+
+---
+
+### **5. Ejecutar Inferencias**
+
+#### **¿Qué es una inferencia?**
+
+Una inferencia es el proceso mediante el cual el sistema analiza tu mensaje, consulta su base de conocimiento y genera una recomendación o cotización basada en reglas explícitas.
+
+#### **Ejemplos prácticos de mensajes para probar**
+
+**Ejemplo 1: Solicitud simple de componentes**
+```
+Necesito 2 motores NEMA17
+```
+
+**Resultado esperado:**
+- Agente 1 detecta: "solicitud de 2 motores NEMA17"
+- Agente 2 consulta catálogo, ve stock disponible (12 piezas), calcula precio
+- Agente 3 propone: "Cotización generada: 2 × Motor NEMA17 = $37 USD. Stock confirmado."
+
+---
+
+**Ejemplo 2: Solicitud con compatibilidad**
+```
+Quiero controlar 3 motores paso a paso, ¿qué necesito?
+```
+
+**Resultado esperado:**
+- Agente 1 detecta: "solicitud de controladores para motores paso a paso"
+- Agente 2 infiere: "Si hay motores, falta driver". Sugiere automáticamente 3 × DRV8825
+- Agente 3 explica: "Se agregó regla de compatibilidad: driver requerido para cada motor. Descuento por volumen aplicado."
+
+---
+
+**Ejemplo 3: Solicitud con servicios**
+```
+Necesito diseñar una PCB para controlar un ESP32 con sensores
+```
+
+**Resultado esperado:**
+- Agente 1 detecta: "microcontrolador ESP32" + "diseño PCB"
+- Agente 2 sugiere: 1 × ESP32 + servicio "Prototipado PCB Express"
+- Agente 3 explica: "Se sugirió servicio profesional por complejidad del proyecto"
+
+---
+
+#### **Cambiar divisa**
+
+1. En el header, verás un selector de divisa (USD, MXN, EUR)
+2. Haz clic para cambiar
+3. Los precios se recalculan automáticamente usando tasas de cambio en tiempo real (o locales si no hay conexión)
+
+#### **Ver la bitácora de razonamiento (Admin)**
+
+1. Ve a la vista de Administrador
+2. Ve a la pestaña "Cotizaciones"
+3. Haz clic en una orden
+4. En la sección inferior "Hilo de Razonamiento", verás detalles como:
+   - Qué reglas se aplicaron
+   - Descuentos identificados
+   - Advertencias de stock
+   - Sugerencias técnicas
+
+---
+
+### **6. Utilizar Correctamente el Sistema**
+
+#### **Roles y permisos**
+
+**Rol: Cliente (por defecto)**
+- Puedes enviar mensajes en el chat
+- Recibes cotizaciones automáticas
+- Ves tu historial de solicitudes
+- No puedes editar el catálogo
+
+**Rol: Administrador (email autorizado)**
+- Acceso a todas las vistas de cliente
+- Puedes editar catálogo (precios, disponibilidad)
+- Ves todas las cotizaciones generadas
+- Puedes aprobar, rechazar u observar órdenes
+- Ves la BD completa y puedes importar/exportar datos
+- Ejemplo email autorizado: `a23110162@ceti.mx` (puedes cambiarlo en el código)
+
+#### **Flujo completo: De cliente a admin**
+
+**1. Como Cliente**
+```
+→ Escribe en chat: "Necesito 5 servos SG90"
+→ Recibes cotización: "5 × Servo SG90 = $17.50 USD"
+→ El sistema guarda la solicitud como "pendiente de aprobación"
+```
+
+**2. Como Administrador**
+```
+→ Ve la pestaña "Cotizaciones"
+→ Haz clic en la solicitud del cliente
+→ Revisa detalles: items, precios, reglas aplicadas
+→ Haz clic en "Aprobar" o "Rechazar"
+→ La orden pasa a estado "approved" o "rejected"
+```
+
+#### **Mejores prácticas**
+
+1. **Para clientes:**
+   - Sé específico en tus solicitudes (ej: "3 motores NEMA17 de 1.8°" vs "3 motores")
+   - Si el sistema sugiere componentes adicionales, es por compatibilidad técnica, no es obligatorio
+   - Prueba diferentes divisas para comparar precios
+
+2. **Para administradores:**
+   - Revisa la "Bitácora de Razonamiento" para entender por qué el sistema sugirió algo
+   - Utiliza "Rechazar" si la solicitud no es viable; esto ayuda al sistema a mejorar
+   - Mantén el catálogo actualizado (`Catálogo` tab en Admin) para que los precios y stock sean correctos
+   - Exporta la BD regularmente como respaldo (botón "Descargar JSON")
+
+3. **General:**
+   - Usa Google Sign-In para autenticación (más seguro que clave usuario/contraseña)
+   - Si ves errores en el chat, revisa que GEMINI_API_KEY esté configurado o que haya conectividad
+   - Si necesitas resetear todo, usa "Restablecer DB" en Admin → Colecciones
+
+#### **Editar el catálogo (Administrador)**
+
+1. Ve a la vista de Administrador
+2. Haz clic en la pestaña "Catálogo"
+3. Busca el producto que deseas editar
+4. Haz clic en el producto para ver/editar:
+   - Nombre
+   - Descripción
+   - Precio (en USD base)
+   - Stock disponible
+   - Enlace web de referencia
+5. Guarda los cambios
+
+#### **Aprobar/Rechazar cotizaciones**
+
+1. Ve a la vista de Administrador
+2. Haz clic en "Cotizaciones"
+3. Filtra por estado: "Pendientes", "Aprobados", "Declinados"
+4. Selecciona una cotización
+5. Revisa los detalles en el panel derecho
+6. Haz clic en "Aprobar" (verde) o "Rechazar" (rojo)
+7. La cotización cambia de estado y el cliente recibe una notificación interna
+
+---
+
+### **Troubleshooting: Solución de Problemas Comunes**
+
+#### **Error: "Puerto 3000 ya está en uso"**
+```
+Error: listen EADDRINUSE :::3000
+```
+**Solución:**
+```bash
+# Opción 1: Usar otro puerto
+PORT=3001 npm run dev
+
+# Opción 2: Matar el proceso que usa el puerto 3000 (en Linux/Mac)
+lsof -ti:3000 | xargs kill -9
+
+# Opción 3: En Windows
+netstat -ano | findstr :3000
+taskkill /PID <PID> /F
+```
+
+---
+
+#### **Error: "GEMINI_API_KEY inválida"**
+```
+Error: API key not valid. Please pass a valid API key.
+```
+**Solución:**
+1. Verifica que el archivo `.env` exista y contenga una clave válida
+2. Obtén una clave desde [Google AI Studio](https://aistudio.google.com/apikey)
+3. Sin una clave válida, el sistema usará el motor local fallback automáticamente (respuestas más básicas)
+
+---
+
+#### **Error: "firebase-applet-config.json no encontrado"**
+```
+Warning: firebase-applet-config.json not found. Operating with in-memory database fallback.
+```
+**Explicación:** Es normal. Significa que no configuraste Firebase o no creaste el archivo.
+
+**Opciones:**
+- **Si deseas persistencia en Firestore:** Crea el archivo siguiendo la sección "Configurar Dependencias → Firebase"
+- **Si solo quieres pruebas locales:** Ignora este mensaje. Los datos se guardan en memoria durante la sesión
+
+---
+
+#### **Error: "Firestore connection failed"**
+```
+Failed to initialize or seed Firestore: Error: permission denied
+```
+**Soluciones:**
+1. Verifica que el archivo `firebase-applet-config.json` tenga las credenciales correctas
+2. En Firebase Console, asegúrate de que Firestore está habilitado
+3. Comprueba las Firestore Rules: ve a [firestore.rules](firestore.rules) y copia el contenido a Firebase Console
+
+---
+
+#### **Error: "Google Sign-In no funciona"**
+```
+Error: popup closed by user or blocked by pop-up blocker
+```
+**Soluciones:**
+1. Desactiva el bloqueador de ventanas emergentes (pop-up blocker) en tu navegador
+2. Usa una incógnita/pestaña privada del navegador
+3. Si estás en un iframe (como AI Studio), abre la app en una pestaña nueva
+
+---
+
+#### **El chat no responde o tarda mucho**
+**Causas posibles:**
+- Sin GEMINI_API_KEY: el sistema usa inferencia local (más lenta pero no requiere API)
+- Conexión lenta: Firestore tarda en sincronizar
+- Overload del servidor: muchas solicitudes simultáneas
+
+**Soluciones:**
+1. Agrega GEMINI_API_KEY al `.env` para acelerar respuestas
+2. Espera unos segundos antes de enviar otro mensaje
+3. Reinicia el servidor: `npm run dev`
+
+---
+
+#### **Datos no se guardan (pierdo todo al reiniciar)**
+**Causa:** No tienes Firebase conectado.
+
+**Solución:**
+1. Configura Firebase siguiendo "Configurar Dependencias → Firebase"
+2. Crea el archivo `firebase-applet-config.json`
+3. Reinicia el servidor: `npm run dev`
+
+Si ves "Firestore successfully connected" en los logs, ya está guardando en la nube.
+
+---
+
+#### **¿Cómo cambio el email del administrador?**
+**Archivo:** [src/App.tsx](src/App.tsx), línea ~120
+
+Busca:
+```typescript
+if (email === "a23110162@ceti.mx") {
+  setActiveRole("admin");
+}
+```
+
+Reemplaza con tu email:
+```typescript
+if (email === "tu-email@ejemplo.com") {
+  setActiveRole("admin");
+}
+```
+
+Guarda y reinicia el servidor.
+
+---
+
+#### **¿Dónde están guardados los datos sin Firebase?**
+Los datos se guardan en memoria local durante la sesión. Si deseas persistencia local sin Firestore:
+- **Archivo de clientes:** `server_clients.json`
+- **Archivo de personal:** `server_staff.json`
+
+Estos archivos se actualizan cuando cambias catálogo, órdenes o usuarios en modo local.
+
+---
+
+### **Comandos Útiles de Referencia Rápida**
+
+```bash
+# Iniciar en desarrollo
+npm run dev
+
+# Compilar para producción
+npm build
+
+# Iniciar versión compilada
+npm start
+
+# Verificar sintaxis TypeScript
+npm run lint
+
+# Limpiar archivos compilados
+npm run clean
+```
+
+---
+
+### **Conclusión del Manual**
+
+¡Has completado la guía! Ahora puedes:
+- ✅ Instalar y ejecutar el sistema localmente
+- ✅ Configurar Firestore (opcional) para persistencia
+- ✅ Enviar mensajes y recibir cotizaciones automatizadas
+- ✅ Usar la consola de administrador para auditar decisiones
+- ✅ Respaldar y restaurar datos
+- ✅ Resolver problemas comunes
+
+**Para más detalles técnicos**, ve a la sección "Definición y tareas de agentes" o consulta el código en [server.ts](server.ts) y [src/App.tsx](src/App.tsx).
+
+---
+
+## **Definición y tareas de agentes**
 
 La siguiente sección describe propiedades, dependencias y tareas mínimas para los agentes del sistema SE-FIUNVA.
 
